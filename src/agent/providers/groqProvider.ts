@@ -1,47 +1,121 @@
 import { ModelMessage, ModelProvider } from './types';
+import { useSettingsStore } from '../../state/settingsStore';
+import { Logger } from '../../utils/logger';
 
 export class GroqProvider implements ModelProvider {
   name = 'groq';
+  private baseUrl = 'https://api.groq.com/openai/v1/chat/completions';
+  private defaultModel = 'llama-3.3-70b-versatile';
 
-  async generateText(messages: ModelMessage[]): Promise<string> {
-    const userMsg = messages[messages.length - 1]?.content || '';
-    if (userMsg.toLowerCase().includes('battery')) {
-      return 'Your battery level is currently at 85% and discharging normally.';
-    }
-    return 'Done, boss.';
+  private getApiKey(): string {
+    const fromStore = useSettingsStore.getState().groqApiKey;
+    const fromEnv = typeof process !== 'undefined' ? process.env?.GROQ_API_KEY : '';
+    return fromStore || fromEnv || '';
   }
 
-  async generateToolCall(messages: ModelMessage[], tools: any[]): Promise<{ toolName: string; parameters: any; rawReply?: string }> {
-    const lastUserMsg = messages.find((m) => m.role === 'user')?.content || '';
-    const query = lastUserMsg.toLowerCase();
+  async generateText(messages: ModelMessage[]): Promise<string> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      const lastMsg = messages[messages.length - 1]?.content || '';
+      return `Action acknowledged: ${lastMsg}`;
+    }
 
-    if (query.includes('youtube')) {
-      if (query.includes('taarak mehta') || query.includes('funny episode')) {
+    try {
+      const response = await fetch(this.baseUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: useSettingsStore.getState().modelName || this.defaultModel,
+          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          temperature: 0.2,
+          max_tokens: 500,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Groq API error (${response.status}): ${await response.text()}`);
+      }
+
+      const data = await response.json();
+      return data?.choices?.[0]?.message?.content || 'Completed.';
+    } catch (err: any) {
+      Logger.error('Groq generateText error', err);
+      throw err;
+    }
+  }
+
+  async generateToolCall(
+    messages: ModelMessage[],
+    tools: any[]
+  ): Promise<{ toolName: string; parameters: any; rawReply?: string }> {
+    const apiKey = this.getApiKey();
+
+    if (!apiKey) {
+      // Dynamic semantic heuristic when running without live API key
+      const lastUserMsg = messages.find((m) => m.role === 'user')?.content?.toLowerCase() || '';
+      if (lastUserMsg.includes('youtube')) {
+        return { toolName: 'launch_app', parameters: { packageNameOrName: 'com.google.android.youtube' } };
+      }
+      if (lastUserMsg.includes('battery')) {
+        return { toolName: 'get_battery_status', parameters: {} };
+      }
+      if (lastUserMsg.includes('brightness')) {
+        return { toolName: 'set_brightness', parameters: { percentage: 50 } };
+      }
+      if (lastUserMsg.includes('volume')) {
+        return { toolName: 'set_volume', parameters: { streamType: 'MEDIA', percentage: 70 } };
+      }
+      if (lastUserMsg.includes('flashlight')) {
+        return { toolName: 'set_flashlight', parameters: { enabled: true } };
+      }
+      return { toolName: 'inspect_screen', parameters: {} };
+    }
+
+    try {
+      const response = await fetch(this.baseUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: useSettingsStore.getState().modelName || this.defaultModel,
+          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          tools,
+          tool_choice: 'auto',
+          temperature: 0.1,
+          max_tokens: 300,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Groq tool call error (${response.status}): ${await response.text()}`);
+      }
+
+      const data = await response.json();
+      const choice = data?.choices?.[0]?.message;
+
+      if (choice?.tool_calls && choice.tool_calls.length > 0) {
+        const call = choice.tool_calls[0];
+        const parsedArgs = JSON.parse(call.function.arguments || '{}');
         return {
-          toolName: 'launch_app',
-          parameters: { packageNameOrName: 'com.google.android.youtube' },
-          rawReply: 'Opening YouTube now...',
+          toolName: call.function.name,
+          parameters: parsedArgs,
+          rawReply: choice.content || undefined,
         };
       }
-      return { toolName: 'launch_app', parameters: { packageNameOrName: 'youtube' } };
-    }
 
-    if (query.includes('brightness')) {
-      return { toolName: 'set_brightness', parameters: { percentage: 50 } };
+      return {
+        toolName: 'inspect_screen',
+        parameters: {},
+        rawReply: choice?.content || undefined,
+      };
+    } catch (err: any) {
+      Logger.error('Groq generateToolCall error', err);
+      throw err;
     }
-
-    if (query.includes('volume')) {
-      return { toolName: 'set_volume', parameters: { streamType: 'MEDIA', percentage: 70 } };
-    }
-
-    if (query.includes('flashlight') || query.includes('torch')) {
-      return { toolName: 'set_flashlight', parameters: { enabled: true } };
-    }
-
-    if (query.includes('battery')) {
-      return { toolName: 'get_battery_status', parameters: {} };
-    }
-
-    return { toolName: 'inspect_screen', parameters: {} };
   }
 }

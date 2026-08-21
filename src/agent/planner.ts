@@ -16,33 +16,37 @@ export class Planner {
     const query = snapshot.activeGoal.toLowerCase();
     const plan: PlannedAction[] = [];
 
-    // Fast deterministic routing for common multi-step benchmark: YouTube search & play
-    if (query.includes('youtube') && (query.includes('taarak mehta') || query.includes('funny episode') || query.includes('search'))) {
+    // Dynamic multi-step app search & play workflow decomposition
+    const appSearchMatch = query.match(/(?:open|launch)\s+([a-zA-Z0-9_\s]+?)\s+(?:and\s+)?search\s+(?:for\s+)?(.+?)(?:\s+(?:and\s+play|and\s+watch|play|watch)\s*(.*))?$/i);
+    
+    if (appSearchMatch) {
+      const targetApp = appSearchMatch[1].trim();
+      const searchQuery = appSearchMatch[2].trim();
+
       plan.push({
-        id: 'step_launch_yt',
+        id: 'step_launch_app',
         toolName: 'launch_app',
-        parameters: { packageNameOrName: 'com.google.android.youtube' },
-        description: 'Launch YouTube app',
-        verificationRule: { expectedPackage: 'com.google.android.youtube' },
+        parameters: { packageNameOrName: targetApp },
+        description: `Launch ${targetApp}`,
       });
       plan.push({
-        id: 'step_click_search',
+        id: 'step_open_search',
         toolName: 'click_node',
         parameters: { nodeId: 'search_button' },
-        description: 'Tap search button in YouTube header',
+        description: `Tap search in ${targetApp}`,
         verificationRule: { expectedElementId: 'search_edit_text' },
       });
       plan.push({
         id: 'step_type_query',
         toolName: 'type_text',
-        parameters: { text: 'Taarak Mehta Ka Ooltah Chashmah funny episode', clearFirst: true },
-        description: 'Type search query',
+        parameters: { text: searchQuery, clearFirst: true },
+        description: `Type search query "${searchQuery}"`,
       });
       plan.push({
-        id: 'step_play_video',
+        id: 'step_select_result',
         toolName: 'click_node',
         parameters: { nodeId: 'video_card_1' },
-        description: 'Select and play most viewed video result',
+        description: `Select and open top result for "${searchQuery}"`,
       });
       return plan;
     }

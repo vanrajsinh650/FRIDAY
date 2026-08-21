@@ -11,7 +11,9 @@ class FridayPackage : ReactPackage {
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
         return listOf(
             AccessibilityTurboModule(reactContext),
-            SystemControlTurboModule(reactContext)
+            SystemControlTurboModule(reactContext),
+            SpeechRecognizerTurboModule(reactContext),
+            TTSTurboModule(reactContext)
         )
     }
 
