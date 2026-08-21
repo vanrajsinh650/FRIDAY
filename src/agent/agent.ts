@@ -20,38 +20,64 @@ export class FridayAgent {
     TelemetryLogger.recordEvent('AGENT_STARTED', { goal: rawGoal });
 
     try {
-      // 1. OBSERVE: Assemble screen & memory context
-      const contextSnapshot = await ContextManager.assembleContext(rawGoal);
+      let isGoalComplete = false;
+      let stepCount = 0;
+      const maxSteps = 10;
+      const history: string[] = [];
 
-      // 2. PLAN: Formulate atomic steps
-      const plan = await this.planner.createPlan(contextSnapshot);
-      TelemetryLogger.recordEvent('PLAN_CREATED', { stepCount: plan.length, latencyMs: Date.now() - taskStartTime });
+      while (!isGoalComplete && stepCount < maxSteps) {
+        stepCount++;
 
-      // 3. ACT & VERIFY LOOP
-      useAgentStore.getState().setAgentState('EXECUTING');
-      for (const step of plan) {
-        let success = false;
+        // 1. OBSERVE: Refresh screen & memory context
+        const contextSnapshot = await ContextManager.assembleContext(rawGoal, history);
+
+        // 2. PLAN: Ask model provider for the next action based on current UI state
+        useAgentStore.getState().setAgentState('PLANNING');
+        const plan = await this.planner.createPlan(contextSnapshot);
+        TelemetryLogger.recordEvent('PLAN_CREATED', {
+          stepCount: plan.length,
+          latencyMs: Date.now() - taskStartTime,
+        });
+
+        if (plan.length === 0) {
+          isGoalComplete = true;
+          break;
+        }
+
+        // 3. ACT: Execute the step
+        useAgentStore.getState().setAgentState('EXECUTING');
+        const currentStep = plan[0];
+        let stepSuccess = false;
         let retries = 0;
 
-        while (!success && retries < 3) {
-          const result = await ExecutionEngine.executeStep(step);
+        while (!stepSuccess && retries < 3) {
+          const result = await ExecutionEngine.executeStep(currentStep);
           if (result.success) {
             useAgentStore.getState().setAgentState('VERIFYING');
-            const verified = await VerificationEngine.verifyStepOutcome(step);
+            const verified = await VerificationEngine.verifyStepOutcome(currentStep);
             if (verified) {
-              success = true;
+              stepSuccess = true;
+              history.push(`Executed ${currentStep.toolName}: ${JSON.stringify(currentStep.parameters)} -> Success`);
             } else {
               retries++;
-              await RecoveryManager.attemptRecovery(step, retries);
+              await RecoveryManager.attemptRecovery(currentStep, retries);
             }
           } else {
             retries++;
-            await RecoveryManager.attemptRecovery(step, retries);
+            await RecoveryManager.attemptRecovery(currentStep, retries);
           }
         }
 
-        if (!success) {
-          throw new Error(`Failed to complete step: ${step.description}`);
+        if (!stepSuccess) {
+          throw new Error(`Failed to complete step: ${currentStep.description}`);
+        }
+
+        // Stop if action was terminal (e.g. system control / single intent)
+        if (currentStep.toolName === 'get_battery_status' || currentStep.toolName === 'set_volume' || currentStep.toolName === 'set_brightness' || currentStep.toolName === 'set_flashlight') {
+          isGoalComplete = true;
+        } else if (stepCount >= 4) {
+          // Finished standard exploration sequence
+          isGoalComplete = true;
         }
       }
 

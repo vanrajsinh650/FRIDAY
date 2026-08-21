@@ -22,6 +22,9 @@ Your job is to understand the user's natural language goal, inspect the current 
 [USER PROFILE & MEMORY]
 ${memorySnippet || 'No specific user facts stored.'}
 
+[RECENT ACTION HISTORY]
+${snapshot.recentActionHistory.length > 0 ? snapshot.recentActionHistory.join('\n') : 'No actions executed yet.'}
+
 [CURRENT SCREEN STATE]
 ${formattedScreen}
 `;

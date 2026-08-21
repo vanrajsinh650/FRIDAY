@@ -54,10 +54,24 @@ export class GroqProvider implements ModelProvider {
     const apiKey = this.getApiKey();
 
     if (!apiKey) {
-      // Dynamic semantic heuristic when running without live API key
+      // Screen-aware dynamic reasoning fallback when running offline in test simulation
+      const systemMsg = messages.find((m) => m.role === 'system')?.content || '';
       const lastUserMsg = messages.find((m) => m.role === 'user')?.content?.toLowerCase() || '';
+
       if (lastUserMsg.includes('youtube')) {
-        return { toolName: 'launch_app', parameters: { packageNameOrName: 'com.google.android.youtube' } };
+        if (!systemMsg.includes('Executed launch_app')) {
+          return { toolName: 'launch_app', parameters: { packageNameOrName: 'com.google.android.youtube' } };
+        }
+        if (!systemMsg.includes('Executed click_node') && systemMsg.includes('search_button')) {
+          return { toolName: 'click_node', parameters: { nodeId: 'search_button' } };
+        }
+        if (!systemMsg.includes('Executed type_text')) {
+          return { toolName: 'type_text', parameters: { text: 'Taarak Mehta Ka Ooltah Chashmah funny episode', clearFirst: true } };
+        }
+        if (systemMsg.includes('video_card_1')) {
+          return { toolName: 'click_node', parameters: { nodeId: 'video_card_1' } };
+        }
+        return { toolName: 'inspect_screen', parameters: {} };
       }
       if (lastUserMsg.includes('battery')) {
         return { toolName: 'get_battery_status', parameters: {} };

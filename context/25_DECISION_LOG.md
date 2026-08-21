@@ -31,9 +31,10 @@
 - **Decision:** Implement `FridayAccessibilityService` to inspect the UI node hierarchy and call `dispatchGesture()`.
 - **Consequences:** Requires the user to grant Accessibility permissions in Android Settings during onboarding.
 
-### ADR-004: Pocket-TTS Selection for Lightweight CPU Speech Synthesis
-- **Context:** FRIDAY needs low-latency, natural voice generation on mobile devices without relying on GPU servers.
-- **Decision:** Select Pocket-TTS as the primary TTS engine due to its CPU-first architecture and chunked audio streaming.
+### ADR-004: Android Native TextToSpeech Engine Baseline with Pocket-TTS Target
+- **Context:** FRIDAY requires immediate, reliable on-device speech synthesis to speak responses without network latency.
+- **Decision:** Utilize Android's built-in `android.speech.tts.TextToSpeech` as the primary reliable baseline engine for the native mobile pipeline proof, with Pocket-TTS / KittenTTS as target evaluations for neural voice synthesis in advanced phases.
+- **Consequences:** Provides instant zero-dependency audio output on all Android devices while maintaining the abstracted interface for neural TTS drop-in.
 
 ### ADR-005: Groq Llama 3.3 70B as Primary Fast Inference Provider
 - **Context:** To achieve <500ms time-to-first-action, the LLM must return initial tokens in under 250ms.
