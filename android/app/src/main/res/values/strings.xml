@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">FRIDAY</string>
+    <string name="accessibility_service_description">FRIDAY AI Operating Layer for autonomous app navigation and voice-driven device control.</string>
+</resources>

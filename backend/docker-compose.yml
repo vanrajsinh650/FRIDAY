@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  friday-brain:
+    build: .
+    container_name: friday_brain
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - FRIDAY_AUTH_SECRET=${FRIDAY_AUTH_SECRET}
