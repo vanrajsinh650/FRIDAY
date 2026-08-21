@@ -41,8 +41,7 @@ class FridayVoiceInteractionSession(private val ctx: Context) : VoiceInteraction
         }
 
         val hudText = TextView(ctx).apply {
-            text = "FRIDAY ASSISTANT ACTIVE
-Listening for command..."
+            text = "FRIDAY ASSISTANT ACTIVE\nListening for command..."
             setTextColor(Color.parseColor("#00F0FF"))
             textSize = 18f
             gravity = Gravity.CENTER

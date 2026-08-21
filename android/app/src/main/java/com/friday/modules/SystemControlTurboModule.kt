@@ -71,7 +71,7 @@ class SystemControlTurboModule(private val reactContext: ReactApplicationContext
     }
 
     @ReactMethod
-    fun setFlashlight(enabled: boolean, promise: Promise) {
+    fun setFlashlight(enabled: Boolean, promise: Promise) {
         val cameraManager = reactContext.getSystemService(Context.CAMERA_SERVICE) as CameraManager
         try {
             val cameraId = cameraManager.cameraIdList[0]
