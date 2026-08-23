@@ -1,41 +1,6 @@
 import { ToolDefinition } from './types';
 import { SystemControlModule } from '../native/SystemControlModule';
 
-export const launchAppTool: ToolDefinition = {
-  name: 'launch_app',
-  description: 'Launches an installed Android application by package name or common app name (e.g. YouTube, WhatsApp, Maps).',
-  parameters: {
-    type: 'object',
-    properties: {
-      packageNameOrName: {
-        type: 'string',
-        description: 'Android package name (e.g. com.google.android.youtube) or app name (e.g. YouTube)',
-      },
-    },
-    required: ['packageNameOrName'],
-  },
-  execute: async ({ packageNameOrName }) => {
-    const startTime = Date.now();
-    const pkgMap: Record<string, string> = {
-      youtube: 'com.google.android.youtube',
-      whatsapp: 'com.whatsapp',
-      chrome: 'com.android.chrome',
-      maps: 'com.google.android.apps.maps',
-      spotify: 'com.spotify.music',
-      clock: 'com.google.android.deskclock',
-      settings: 'com.android.settings',
-    };
-
-    const targetPkg = pkgMap[packageNameOrName.toLowerCase()] || packageNameOrName;
-    const ok = await SystemControlModule.launchApp(targetPkg);
-    return {
-      success: ok,
-      data: { launchedPackage: targetPkg },
-      durationMs: Date.now() - startTime,
-    };
-  },
-};
-
 export const openUrlTool: ToolDefinition = {
   name: 'open_url',
   description: 'Opens a web URL or deep link in the default browser.',
@@ -46,9 +11,48 @@ export const openUrlTool: ToolDefinition = {
     },
     required: ['url'],
   },
-  execute: async ({ url }) => {
+  execute: async ({ url }: { url: string }) => {
     const startTime = Date.now();
     const ok = await SystemControlModule.openUrl(url);
     return { success: ok, data: { url }, durationMs: Date.now() - startTime };
+  },
+};
+
+export const closeAppTool: ToolDefinition = {
+  name: 'close_app',
+  description: 'Closes and dismisses a specific running application by name (e.g. YouTube, WhatsApp, Instagram).',
+  parameters: {
+    type: 'object',
+    properties: {
+      appName: { type: 'string', description: 'Name of the app to close' },
+    },
+    required: ['appName'],
+  },
+  execute: async ({ appName }: { appName: string }) => {
+    const { AccessibilityModule } = await import('../native/AccessibilityModule');
+    const ok = await AccessibilityModule.closeSpecificApp(appName);
+    return {
+      success: ok,
+      data: {
+        appName,
+        summary: `Closed ${appName} for you, Boss.`,
+      },
+    };
+  },
+};
+
+export const closeCurrentAppTool: ToolDefinition = {
+  name: 'close_current_app',
+  description: 'Closes and exits the currently active foreground application and returns to home screen.',
+  parameters: { type: 'object', properties: {} },
+  execute: async () => {
+    const { AccessibilityModule } = await import('../native/AccessibilityModule');
+    const ok = await AccessibilityModule.closeCurrentApp();
+    return {
+      success: ok,
+      data: {
+        summary: 'Closed the current application for you, Boss.',
+      },
+    };
   },
 };

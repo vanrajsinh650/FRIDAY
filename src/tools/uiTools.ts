@@ -73,6 +73,39 @@ export const pressBackTool: ToolDefinition = {
   parameters: { type: 'object', properties: {} },
   execute: async () => {
     const ok = await AccessibilityModule.pressBack();
-    return { success: ok };
+    return { success: ok, data: { backed: ok } };
+  },
+};
+
+export const closeBackgroundAppsTool: ToolDefinition = {
+  name: 'close_background_apps',
+  description: 'Closes and clears all background running applications from recent apps.',
+  parameters: { type: 'object', properties: {} },
+  execute: async () => {
+    const ok = await AccessibilityModule.closeBackgroundApps();
+    return {
+      success: ok,
+      data: {
+        summary: 'All background applications have been closed and cleared, Boss.',
+      },
+    };
+  },
+};
+
+export const describeScreenTool: ToolDefinition = {
+  name: 'see_screen',
+  description: 'Observes and inspects the current phone screen to see what app is open, what video is playing, or what text is displayed.',
+  parameters: { type: 'object', properties: {} },
+  execute: async () => {
+    const desc = await AccessibilityModule.describeScreen();
+    const cleanPkg = desc.activePackage.split('.').pop() || 'app';
+    const summary = `You are currently on ${cleanPkg}. On your screen I can see: ${desc.elementsSummary}, boss.`;
+    return {
+      success: true,
+      data: {
+        ...desc,
+        summary,
+      },
+    };
   },
 };

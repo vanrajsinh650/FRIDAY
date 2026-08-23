@@ -4,14 +4,25 @@ import { MemoryFact } from './types';
 export class ScopedMemoryRetriever {
   static retrieveRelevantFacts(goal: string, activePackage?: string): MemoryFact[] {
     const all = MemoryStore.getAllFacts();
-    const query = goal.toLowerCase();
+    if (all.length === 0) {
+      return [];
+    }
 
-    // Scoped retrieval: only return facts relevant to active entities
-    return all.filter((fact) => {
-      const keyMatch = query.includes(fact.key.toLowerCase());
-      const valMatch = query.includes(fact.value.toLowerCase());
-      const pkgMatch = activePackage ? fact.value.toLowerCase().includes(activePackage.toLowerCase()) : false;
-      return keyMatch || valMatch || pkgMatch;
+    const query = goal.toLowerCase();
+    const scored = all.map((fact) => {
+      let score = 0;
+      if (query.includes(fact.key.toLowerCase())) score += 5;
+      if (query.includes(fact.value.toLowerCase())) score += 3;
+      if (activePackage && fact.value.toLowerCase().includes(activePackage.toLowerCase())) score += 2;
+      return { fact, score };
     });
+
+    const matching = scored.filter((s) => s.score > 0);
+    if (matching.length > 0) {
+      matching.sort((a, b) => b.score - a.score);
+      return matching.slice(0, 20).map((s) => s.fact);
+    }
+
+    return all.slice(0, 20);
   }
 }

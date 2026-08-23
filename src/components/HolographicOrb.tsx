@@ -9,13 +9,56 @@ interface Props {
 }
 
 export const HolographicOrb: React.FC<Props> = ({ state, onPress }) => {
-  const isGlowing = state === 'LISTENING' || state === 'SPEAKING' || state === 'EXECUTING';
+  const isIdle = state === 'IDLE';
+  const isSpeakingOrSuccess = state === 'SPEAKING' || state === 'SUCCESS';
+  const isExecuting = state === 'EXECUTING';
+  const isThinking = state === 'THINKING' || state === 'PLANNING';
+  const isVerifying = state === 'VERIFYING';
+  const isError = state === 'ERROR';
+
+  let activeColor = Colors.hudCyan;
+  let activeDimColor = Colors.hudCyanDim;
+
+  if (isSpeakingOrSuccess) {
+    activeColor = Colors.hudGreen;
+    activeDimColor = 'rgba(0, 255, 136, 0.25)';
+  } else if (isExecuting) {
+    activeColor = Colors.hudOrange;
+    activeDimColor = 'rgba(255, 170, 0, 0.25)';
+  } else if (isThinking) {
+    activeColor = Colors.hudBlue;
+    activeDimColor = 'rgba(0, 119, 255, 0.25)';
+  } else if (isVerifying) {
+    activeColor = Colors.hudCyan;
+    activeDimColor = 'rgba(0, 240, 255, 0.35)';
+  } else if (isError) {
+    activeColor = Colors.hudRed;
+    activeDimColor = 'rgba(255, 51, 102, 0.25)';
+  }
 
   return (
     <TouchableOpacity activeOpacity={0.8} onPress={onPress} style={styles.container}>
-      <View style={[styles.outerRing, isGlowing && styles.outerRingGlow]}>
-        <View style={[styles.middleRing, isGlowing && styles.middleRingGlow]}>
-          <View style={[styles.coreOrb, isGlowing && styles.coreOrbGlow]} />
+      <View
+        style={[
+          styles.outerRing,
+          { borderColor: !isIdle ? activeColor : Colors.hudCyanDim },
+        ]}
+      >
+        <View
+          style={[
+            styles.middleRing,
+            { borderColor: !isIdle ? activeColor : Colors.hudBlue },
+          ]}
+        >
+          <View
+            style={[
+              styles.coreOrb,
+              {
+                borderColor: !isIdle ? activeColor : Colors.hudCyan,
+                backgroundColor: !isIdle ? activeDimColor : Colors.hudCyanDim,
+              },
+            ]}
+          />
         </View>
       </View>
     </TouchableOpacity>
@@ -37,9 +80,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  outerRingGlow: {
-    borderColor: Colors.hudCyan,
-  },
   middleRing: {
     width: 140,
     height: 140,
@@ -49,9 +89,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  middleRingGlow: {
-    borderColor: Colors.hudCyan,
-  },
   coreOrb: {
     width: 90,
     height: 90,
@@ -59,8 +96,5 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.hudCyanDim,
     borderWidth: 2,
     borderColor: Colors.hudCyan,
-  },
-  coreOrbGlow: {
-    backgroundColor: Colors.hudCyan,
   },
 });

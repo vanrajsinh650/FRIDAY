@@ -33,7 +33,7 @@
 
 1. **Multi-Tenant SaaS Infrastructure:** No complex multi-user authentication, billing, or enterprise team hierarchies.
 2. **Remote Phone Screen Streaming:** The backend does NOT stream video or remote-control the phone from the cloud; reasoning plans are generated and executed locally on-device.
-3. **Root / Kernel Exploits:** No dependence on Magisk, KernelSU, or root permissions. All automation uses legitimate Android APIs (`AccessibilityService`, `VoiceInteractionService`).
+3. **Kernel Exploits & Mandatory Root:** No dependence on kernel exploits, and root is **never required**. Automation is built on legitimate Android APIs (`AccessibilityService`, `VoiceInteractionService`) first. Elevated control is obtained through a **Shizuku-first `RootControl`** seam: it uses Shizuku (ADB-level privileges, no root, no unlock, near-zero brick risk) when the user has authorised it, and *opportunistically* uses true root only if it already happens to be present at runtime. FRIDAY never installs Magisk/KernelSU or roots the device itself — it stays device-agnostic and degrades gracefully to accessibility-only when neither is available.
 4. **Heavy Unstructured Vector DBs:** No embedding millions of vectors on-device; structured SQLite + keyword indexing is used for memory.
 5. **Mandatory Laptop Pairing:** The user will NEVER need their development laptop running to use FRIDAY in daily life.
 

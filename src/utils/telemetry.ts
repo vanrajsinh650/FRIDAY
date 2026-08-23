@@ -5,6 +5,8 @@ export type TelemetryEventType =
   | 'VOICE_DETECTED'
   | 'STT_STARTED'
   | 'STT_RESULT'
+  | 'SEMANTIC_PROCESSED'
+  | 'VOICE_STATE_TRANSITION'
   | 'AGENT_STARTED'
   | 'PLAN_CREATED'
   | 'ACTION_DISPATCHED'
@@ -14,6 +16,7 @@ export type TelemetryEventType =
   | 'VERIFICATION_PASSED'
   | 'RECOVERY_STARTED'
   | 'TASK_COMPLETED'
+  | 'TASK_BLOCKED'
   | 'TASK_FAILED';
 
 export class TelemetryLogger {

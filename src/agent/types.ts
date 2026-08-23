@@ -1,11 +1,22 @@
-import { ScreenTree } from '../native/types';
+import { ScreenTree, UINode } from '../native/types';
 import { MemoryFact } from '../memory/types';
+export * from './task/types';
+import { GoalType, TaskState } from './task/types';
 
-export interface AgentGoal {
-  rawTranscript: string;
-  normalizedIntent: string;
+export interface ConversationTurn {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
   targetApp?: string;
-  isMultiStep: boolean;
+  entities?: Record<string, string>;
+}
+
+export interface ConversationState {
+  turns: ConversationTurn[];
+  activeApp?: string;
+  activeEntity?: string;
+  recentSearchQuery?: string;
+  recentContact?: string;
 }
 
 export interface PlannedAction {
@@ -22,7 +33,10 @@ export interface PlannedAction {
 
 export interface AgentContextSnapshot {
   activeGoal: string;
+  goalType: GoalType;
   screenTree: ScreenTree;
   memoryFacts: MemoryFact[];
   recentActionHistory: string[];
+  conversationHistory: ConversationTurn[];
+  activeTask?: TaskState;
 }

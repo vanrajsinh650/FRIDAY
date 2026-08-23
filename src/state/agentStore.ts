@@ -50,7 +50,7 @@ export const useAgentStore = create<AgentStore>((set) => ({
   errorMessage: null,
 
   setAgentState: (state) => set({ state }),
-  setActiveGoal: (activeGoal) => set({ activeGoal, steps: [], currentStepIndex: -1, errorMessage: null }),
+  setActiveGoal: (activeGoal) => set({ activeGoal, steps: [], currentStepIndex: -1, lastResponse: null, errorMessage: null }),
   addStep: (step) => {
     const id = `step_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
     set((s) => ({

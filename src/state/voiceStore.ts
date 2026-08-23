@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { VoiceSessionState } from '../voice/voiceStateMachine';
 
 export interface VoiceStore {
   isWakeWordListening: boolean;
@@ -8,6 +9,7 @@ export interface VoiceStore {
   transcriptStream: string;
   finalTranscript: string | null;
   ttsEngine: 'pocket-tts' | 'kittentts' | 'native-fallback';
+  sessionState: string;
   
   setWakeWordListening: (active: boolean) => void;
   setRecording: (active: boolean) => void;
@@ -16,6 +18,7 @@ export interface VoiceStore {
   setTranscriptStream: (text: string) => void;
   setFinalTranscript: (text: string | null) => void;
   setTtsEngine: (engine: 'pocket-tts' | 'kittentts' | 'native-fallback') => void;
+  setSessionState: (state: string) => void;
 }
 
 export const useVoiceStore = create<VoiceStore>((set) => ({
@@ -26,6 +29,7 @@ export const useVoiceStore = create<VoiceStore>((set) => ({
   transcriptStream: '',
   finalTranscript: null,
   ttsEngine: 'pocket-tts',
+  sessionState: 'SLEEPING',
 
   setWakeWordListening: (isWakeWordListening) => set({ isWakeWordListening }),
   setRecording: (isRecording) => set({ isRecording }),
@@ -34,4 +38,5 @@ export const useVoiceStore = create<VoiceStore>((set) => ({
   setTranscriptStream: (transcriptStream) => set({ transcriptStream }),
   setFinalTranscript: (finalTranscript) => set({ finalTranscript }),
   setTtsEngine: (ttsEngine) => set({ ttsEngine }),
+  setSessionState: (sessionState) => set({ sessionState }),
 }));

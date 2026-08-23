@@ -1,33 +1,37 @@
 import { useVoiceStore } from '../state/voiceStore';
+import { PocketTTSEngine } from './tts';
 
 export class AudioManager {
-  private static isDucked = false;
+  private static isRecording = false;
 
-  static startRecording(onChunk: (rms: number) => void): void {
+  static startRecording(): void {
+    this.isRecording = true;
     useVoiceStore.getState().setRecording(true);
-    // Simulate real-time microphone RMS level stream in dev
-    const interval = setInterval(() => {
-      if (!useVoiceStore.getState().isRecording) {
-        clearInterval(interval);
-        return;
-      }
-      const fakeRms = Math.min(1.0, Math.max(0.05, Math.random() * 0.8));
-      useVoiceStore.getState().setRmsLevel(fakeRms);
-      onChunk(fakeRms);
-    }, 80);
   }
 
   static stopRecording(): void {
+    this.isRecording = false;
     useVoiceStore.getState().setRecording(false);
     useVoiceStore.getState().setRmsLevel(0);
   }
 
-  static duckMediaAudio(duck: boolean): void {
-    this.isDucked = duck;
+  /**
+   * Audio ducking is managed cleanly at the HAL level by Android AudioFocus
+   * (AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK) inside TTSTurboModule.
+   * We do NOT mutate the user's master STREAM_MUSIC hardware volume.
+   */
+  static async duckMediaAudio(_duck: boolean): Promise<void> {
+    // Intentionally no-op to protect the user's system volume settings
   }
 
   static stopAllAudio(): void {
     this.stopRecording();
+  }
+
+  static forceStop(): void {
+    this.stopRecording();
+    PocketTTSEngine.stop();
     useVoiceStore.getState().setSpeaking(false);
   }
 }
+

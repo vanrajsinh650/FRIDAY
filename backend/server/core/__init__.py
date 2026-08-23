@@ -1,0 +1,1 @@
+# FRIDAY Backend — core package

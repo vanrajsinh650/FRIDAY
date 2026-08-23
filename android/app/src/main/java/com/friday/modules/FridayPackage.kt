@@ -8,10 +8,17 @@ import com.facebook.react.uimanager.ReactShadowNode
 import com.facebook.react.uimanager.ViewManager
 
 class FridayPackage : ReactPackage {
+    companion object {
+        var currentReactContext: ReactApplicationContext? = null
+            private set
+    }
+
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
+        currentReactContext = reactContext
         return listOf(
             AccessibilityTurboModule(reactContext),
             SystemControlTurboModule(reactContext),
+            SystemCapabilityTurboModule(reactContext),
             SpeechRecognizerTurboModule(reactContext),
             TTSTurboModule(reactContext)
         )

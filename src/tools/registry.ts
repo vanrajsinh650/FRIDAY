@@ -1,24 +1,106 @@
 import { ToolDefinition, ToolResult } from './types';
-import { launchAppTool, openUrlTool } from './appTools';
-import { inspectScreenTool, clickNodeTool, typeTextTool, scrollPageTool, pressBackTool } from './uiTools';
-import { getBatteryStatusTool, setVolumeTool, setBrightnessTool, setFlashlightTool } from './systemTools';
+import { openUrlTool, closeAppTool, closeCurrentAppTool } from './appTools';
+import {
+  inspectScreenTool,
+  clickNodeTool,
+  typeTextTool,
+  scrollPageTool,
+  pressBackTool,
+  closeBackgroundAppsTool,
+  describeScreenTool,
+} from './uiTools';
+import {
+  launchAppPrimitiveTool,
+  getForegroundAppTool,
+  clickTextTool,
+  clickFirstResultTool,
+  clickFullScreenTool,
+  clickSendButtonTool,
+  pressEnterTool,
+  waitForElementTool,
+  verifyPlaybackActiveTool,
+  verifyMessageSentTool,
+} from './phoneControlTools';
+import {
+  toggleWifiTool,
+  getWifiStatusTool,
+  toggleBluetoothTool,
+  getBluetoothStatusTool,
+  toggleHotspotTool,
+  getDeviceCapabilitiesTool,
+} from './systemCapabilityTools';
+import {
+  getBatteryStatusTool,
+  setVolumeTool,
+  setBrightnessTool,
+  setRingerModeTool,
+  setFlashlightTool,
+  readNotificationsTool,
+  playMediaTool,
+  setAlarmTool,
+  sendWhatsAppMessageTool,
+  getAlarmsTool,
+  callPhoneTool,
+  sendSmsTool,
+  openCameraTool,
+  getCurrentTimeTool,
+  dismissAlarmTool,
+  showAlarmsTool,
+  getInstalledAppsTool,
+} from './systemTools';
+import { saveMemoryFactTool, getMemoryFactsTool, forgetMemoryFactTool } from './memoryTools';
 
 export class ToolRegistry {
   private static tools: Map<string, ToolDefinition> = new Map();
 
   static initialize(): void {
     const defaultTools = [
-      launchAppTool,
+      launchAppPrimitiveTool,
+      getForegroundAppTool,
+      clickTextTool,
+      clickFirstResultTool,
+      clickFullScreenTool,
+      clickSendButtonTool,
+      pressEnterTool,
+      waitForElementTool,
+      verifyPlaybackActiveTool,
+      verifyMessageSentTool,
+      toggleWifiTool,
+      getWifiStatusTool,
+      toggleBluetoothTool,
+      getBluetoothStatusTool,
+      toggleHotspotTool,
+      getDeviceCapabilitiesTool,
       openUrlTool,
+      closeAppTool,
+      closeCurrentAppTool,
       inspectScreenTool,
       clickNodeTool,
       typeTextTool,
       scrollPageTool,
       pressBackTool,
+      closeBackgroundAppsTool,
+      describeScreenTool,
       getBatteryStatusTool,
       setVolumeTool,
       setBrightnessTool,
+      setRingerModeTool,
       setFlashlightTool,
+      readNotificationsTool,
+      playMediaTool,
+      setAlarmTool,
+      sendWhatsAppMessageTool,
+      getAlarmsTool,
+      callPhoneTool,
+      sendSmsTool,
+      openCameraTool,
+      getCurrentTimeTool,
+      dismissAlarmTool,
+      showAlarmsTool,
+      getInstalledAppsTool,
+      saveMemoryFactTool,
+      getMemoryFactsTool,
+      forgetMemoryFactTool,
     ];
     for (const tool of defaultTools) {
       this.tools.set(tool.name, tool);

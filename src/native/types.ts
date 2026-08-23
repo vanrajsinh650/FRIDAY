@@ -38,8 +38,18 @@ export interface BatteryStatus {
 export interface InstalledApp {
   appName: string;
   packageName: string;
+  icon?: string;
   versionName?: string;
   isSystemApp?: boolean;
+}
+
+export interface DeviceStats {
+  batteryLevel: number;
+  isCharging: boolean;
+  totalRamMb: number;
+  availRamMb: number;
+  totalStorageGb: number;
+  freeStorageGb: number;
 }
 
 export interface NotificationItem {

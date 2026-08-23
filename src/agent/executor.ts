@@ -1,4 +1,5 @@
 import { PlannedAction } from './types';
+import { SafetyGuard } from './safetyGuard';
 import { ToolRegistry } from '../tools/registry';
 import { ToolResult } from '../tools/types';
 import { useAgentStore } from '../state/agentStore';
@@ -13,6 +14,13 @@ export class ExecutionEngine {
 
     useAgentStore.getState().updateStepStatus(stepId, 'running');
     TelemetryLogger.recordEvent('ACTION_DISPATCHED', { toolName: action.toolName });
+
+    const safetyCheck = SafetyGuard.isActionSafe(action.toolName, action.parameters);
+    if (!safetyCheck.safe) {
+      const errorMsg = safetyCheck.reason || 'Safety Shield blocked destructive action.';
+      useAgentStore.getState().updateStepStatus(stepId, 'failed', undefined, errorMsg, 0);
+      return { success: false, error: errorMsg };
+    }
 
     const startTime = Date.now();
     const result = await ToolRegistry.executeTool(action.toolName, action.parameters);

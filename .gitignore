@@ -18,6 +18,7 @@ android/app/.cxx/
 android/local.properties
 *.apk
 *.aab
+android/app/src/main/assets/index.android.bundle*
 
 # Environment & Secrets
 .env
@@ -40,3 +41,9 @@ __pycache__/
 venv/
 env/
 backend/data/
+
+# Temporary / Scratch
+*.class
+screen.png
+test_edge_tts.cjs
+rescue_phone.ps1
