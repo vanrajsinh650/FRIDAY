@@ -11,6 +11,9 @@ import { FridayAgent } from '../agent/agent';
 import { SystemControlModule } from '../native/SystemControlModule';
 import { ActionSafetyGuard } from './actionSafetyGuard';
 
+import { useSettingsStore } from '../state/settingsStore';
+import { getSecret } from '../config/secrets';
+
 const { FridaySpeechRecognizerNative } = NativeModules;
 
 export class VoicePipeline {
@@ -24,6 +27,13 @@ export class VoicePipeline {
 
   static initializeWakeWordListener(): void {
     if (this.wakeWordSub) return;
+
+    try {
+      const groqKey = useSettingsStore.getState().groqApiKey || getSecret('GROQ_API_KEY');
+      if (groqKey && FridaySpeechRecognizerNative?.setApiKey) {
+        FridaySpeechRecognizerNative.setApiKey(groqKey).catch(() => {});
+      }
+    } catch (_e) {}
 
     this.stateMachine.onTransition((_from, to) => {
       useVoiceStore.getState().setSessionState(to);

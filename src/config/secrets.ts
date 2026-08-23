@@ -15,7 +15,13 @@
 
 export type SecretKey = 'GROQ_API_KEY' | 'NVIDIA_API_KEY' | 'OPENAI_API_KEY';
 
-// Dev-only fallbacks. Empty string means "no default — must come from env/store".
+let localSecrets: Partial<Record<SecretKey, string>> = {};
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  localSecrets = require('./secrets.local').LOCAL_SECRETS || {};
+} catch (_e) {}
+
+// Dev-only fallbacks. Empty string means "no default — must come from env/store/local".
 const DEV_FALLBACKS: Record<SecretKey, string> = {
   GROQ_API_KEY: '',
   NVIDIA_API_KEY: '',
@@ -37,5 +43,5 @@ function fromEnv(key: SecretKey): string {
 
 // Resolve a secret through the precedence chain above.
 export function getSecret(key: SecretKey): string {
-  return runtimeOverrides[key] || fromEnv(key) || DEV_FALLBACKS[key];
+  return runtimeOverrides[key] || localSecrets[key] || fromEnv(key) || DEV_FALLBACKS[key] || '';
 }

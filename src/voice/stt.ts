@@ -6,6 +6,7 @@ import { TranscriptAccumulator, TranscriptTurn } from './transcriptAccumulator';
 import { VoiceTelemetry } from './voiceTelemetry';
 import { ActionSafetyGuard } from './actionSafetyGuard';
 import { getSecret } from '../config/secrets';
+import { useSettingsStore } from '../state/settingsStore';
 
 const { FridaySpeechRecognizerNative } = NativeModules;
 
@@ -37,7 +38,7 @@ export class SpeechRecognizer {
 
     // Sync current Groq API Key to native HAL
     try {
-      const groqKey = getSecret('GROQ_API_KEY');
+      const groqKey = useSettingsStore.getState().groqApiKey || getSecret('GROQ_API_KEY');
       if (groqKey && FridaySpeechRecognizerNative?.setApiKey) {
         FridaySpeechRecognizerNative.setApiKey(groqKey).catch(() => {});
       }

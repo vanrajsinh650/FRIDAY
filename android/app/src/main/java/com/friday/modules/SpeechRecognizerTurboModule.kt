@@ -27,6 +27,12 @@ class SpeechRecognizerTurboModule(private val reactContext: ReactApplicationCont
     fun setApiKey(apiKey: String?, promise: Promise) {
         if (!apiKey.isNullOrBlank()) {
             FridayForegroundService.groqApiKey = apiKey
+            try {
+                reactContext.getSharedPreferences("friday_prefs", android.content.Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("groq_api_key", apiKey)
+                    .apply()
+            } catch (_: Exception) {}
         }
         promise.resolve(true)
     }

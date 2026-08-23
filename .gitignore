@@ -25,6 +25,7 @@ android/app/src/main/assets/index.android.bundle*
 .env.local
 *.keystore
 *.jks
+src/config/secrets.local.ts
 
 # IDE & OS
 .DS_Store

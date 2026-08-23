@@ -21,6 +21,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.os.Process
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.facebook.react.bridge.Arguments
@@ -143,6 +144,14 @@ class FridayForegroundService : Service() {
         ensureWakeLockHeld()
         setupAudioPlaybackListener()
         startForegroundNotification()
+
+        try {
+            val prefs = getSharedPreferences("friday_prefs", Context.MODE_PRIVATE)
+            val savedKey = prefs.getString("groq_api_key", "") ?: ""
+            if (savedKey.isNotBlank() && groqApiKey.isBlank()) {
+                groqApiKey = savedKey
+            }
+        } catch (_: Exception) {}
         mainHandler.postDelayed({
             if (isServiceRunning) {
                 startSilentWakeDetector()
@@ -416,10 +425,19 @@ class FridayForegroundService : Service() {
         return pattern.matcher(text).find()
     }
 
+    private var lastBackgroundTranscribeTimestamp = 0L
+    private val MIN_BACKGROUND_TRANSCRIBE_INTERVAL_MS = 2500L
+
     private fun handleWakeDetected(preRollAudio: ShortArray?) {
         if (isFridaySpeaking || isActiveQueryRecording || preRollAudio == null || preRollAudio.isEmpty()) {
             return
         }
+
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastBackgroundTranscribeTimestamp < MIN_BACKGROUND_TRANSCRIBE_INTERVAL_MS) {
+            return
+        }
+        lastBackgroundTranscribeTimestamp = now
 
         // Convert raw short PCM pre-roll buffer to WAV bytes in RAM
         val pcmBytes = shortArrayToByteArray(preRollAudio)

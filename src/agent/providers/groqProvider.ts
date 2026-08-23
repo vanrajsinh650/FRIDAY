@@ -8,7 +8,7 @@ import { fetchWithTimeout } from './httpClient';
 export class GroqProvider implements ModelProvider {
   name = 'groq';
   private baseUrl = 'https://api.groq.com/openai/v1/chat/completions';
-  private defaultModel = 'llama-3.1-8b-instant';
+  private defaultModel = 'openai/gpt-oss-20b';
 
   private getApiKey(): string {
     return useSettingsStore.getState().groqApiKey || getSecret('GROQ_API_KEY');

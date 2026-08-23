@@ -24,7 +24,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   openaiApiKey: getSecret('OPENAI_API_KEY'),
   vpsServerUrl: 'http://localhost:8000',
   defaultModelProvider: 'groq',
-  modelName: 'llama-3.1-8b-instant',
+  modelName: 'openai/gpt-oss-20b',
   // Small/fast model for NVIDIA's text planning (it's the fallback now that Groq
   // is primary, so keep it quick). 70B lives on as the safe fallback in the
   // provider if this is ever cleared. Vision stays on the large VLM.
