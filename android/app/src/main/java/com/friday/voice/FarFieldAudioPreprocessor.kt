@@ -139,17 +139,18 @@ class FarFieldAudioPreprocessor {
     @android.annotation.SuppressLint("MissingPermission")
     private fun createAudioRecord(sampleRate: Int, baseBufferSize: Int): AudioRecord? {
         val audioSources = intArrayOf(
-            MediaRecorder.AudioSource.VOICE_RECOGNITION,
             MediaRecorder.AudioSource.MIC,
-            MediaRecorder.AudioSource.DEFAULT
+            MediaRecorder.AudioSource.DEFAULT,
+            MediaRecorder.AudioSource.VOICE_RECOGNITION
         )
 
         for (attempt in 1..4) {
             for (multiplier in intArrayOf(1, 2, 4)) {
                 val bufSize = baseBufferSize * multiplier
                 for (source in audioSources) {
+                    var record: AudioRecord? = null
                     try {
-                        val record = AudioRecord(
+                        record = AudioRecord(
                             source,
                             sampleRate,
                             AudioFormat.CHANNEL_IN_MONO,
@@ -159,11 +160,14 @@ class FarFieldAudioPreprocessor {
                         if (record.state == AudioRecord.STATE_INITIALIZED) {
                             Log.i(TAG, "AudioRecord initialized successfully with source=$source, bufferSize=$bufSize on attempt=$attempt")
                             return record
-                        } else {
-                            record.release()
                         }
                     } catch (e: Exception) {
                         Log.w(TAG, "Exception initializing AudioRecord (source=$source): ${e.message}")
+                    } finally {
+                        if (record != null && record.state != AudioRecord.STATE_INITIALIZED) {
+                            try { record.release() } catch (e: Exception) {}
+                        }
+                        try { Thread.sleep(50) } catch (_: InterruptedException) {}
                     }
                 }
             }
@@ -188,12 +192,18 @@ class FarFieldAudioPreprocessor {
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT
             )
-            val bufferSize = max(if (minBufSize > 0) minBufSize * 2 else 4096, 4096)
+            val bufferSize = max(if (minBufSize > 0) minBufSize * 4 else 8192, 8192)
 
             val record = createAudioRecord(sampleRate, bufferSize)
             if (record == null || record.state != AudioRecord.STATE_INITIALIZED) {
-                Log.e(TAG, "Failed to start listening: Unable to allocate initialized AudioRecord.")
+                Log.e(TAG, "Failed to start listening: Unable to allocate initialized AudioRecord. Retrying in 1.5s...")
                 record?.release()
+                Thread {
+                    try { Thread.sleep(1500) } catch (_: InterruptedException) {}
+                    if (!isRecording) {
+                        startListening(sampleRate, onAudioChunk)
+                    }
+                }.start()
                 return
             }
 

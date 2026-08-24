@@ -175,15 +175,11 @@ class WakeWordDetector(
         }
 
         // Fast noise check for silence and TV noise
-        if (maxRms < -60f && !isWhisperDominant) { // Too quiet, likely silence
-            return PatternResult(false, 0f)
-        }
+        // Removed maxRms strict filter
 
         // 4. SNR Strength Score
         val avgSnr = sumSnr / frames.size
-        if (avgSnr < 1.5f && !isWhisperDominant) { // Background noise / TV
-            return PatternResult(false, 0f)
-        }
+        // Removed avgSnr strict filter
 
         val snrScore = if (isWhisperDominant) {
             ((avgSnr - 1.0f) / 10.0f).coerceIn(0.4f, 1.0f)
@@ -203,9 +199,7 @@ class WakeWordDetector(
         val wakeThreshold = (1.0f - sensitivity) * 0.35f + 0.38f
 
         // Candidate trigger condition (Groq Whisper in RAM performs ground-truth verification)
-        val isWake = compositeConfidence >= wakeThreshold &&
-                     (peakCount in 2..4 || (isWhisperDominant && peakCount >= 1)) &&
-                     fricativeScore >= 0.50f
+        val isWake = compositeConfidence >= wakeThreshold
 
         return PatternResult(isWake, compositeConfidence)
     }

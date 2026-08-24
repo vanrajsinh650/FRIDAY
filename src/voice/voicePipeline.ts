@@ -82,8 +82,8 @@ export class VoicePipeline {
           this.stateMachine.transition(VoiceSessionState.WAKE_DETECTED);
           FloatingOverlayModule.showOverlay('Listening...', 'LISTENING');
           const greeting = this.getRandomWakeAck();
-          await PocketTTSEngine.speak({ text: greeting });
-          await PocketTTSEngine.waitForCompletion();
+          PocketTTSEngine.speak({ text: greeting }).catch(() => {});
+          await new Promise(r => setTimeout(r, 200));
           await this.startContinuousVoiceSession(); // Opens follow-up window
         }
       }
@@ -103,8 +103,8 @@ export class VoicePipeline {
             await this.startContinuousVoiceSession(cmd);
           } else {
             this.stateMachine.transition(VoiceSessionState.WAKE_DETECTED);
-            await PocketTTSEngine.speak({ text: this.getRandomWakeAck() });
-            await PocketTTSEngine.waitForCompletion();
+            PocketTTSEngine.speak({ text: this.getRandomWakeAck() }).catch(() => {});
+            await new Promise(r => setTimeout(r, 200));
             await this.startContinuousVoiceSession();
           }
         }

@@ -500,7 +500,7 @@ class FridayForegroundService : Service() {
                 if (pcmData.size > 16000) { // At least 0.5s audio
                     val wavData = createWavFromPcm(pcmData)
                     transcribeWithGroqWhisper(wavData, language) { transcript ->
-                        val clean = transcript.trim()
+                        val clean = transcript?.trim() ?: ""
                         sendEventToJS("onSpeechFinalResult", Arguments.createMap().apply {
                             putString("transcript", clean)
                             putBoolean("isFinal", true)
@@ -590,7 +590,12 @@ class FridayForegroundService : Service() {
 
         val now = SystemClock.elapsedRealtime()
         if (now < rateLimitBackoffUntil) {
-            Log.d(TAG, "Rate limit backoff active, skipping background wake check (${(rateLimitBackoffUntil - now) / 1000}s remaining)")
+            Log.d(TAG, "Rate limit backoff active, triggering fallback acoustic wake.")
+            sendEventToJS("onWakeWordDetected", Arguments.createMap().apply {
+                putString("wakeWord", "friday")
+                putString("command", "")
+                putString("fullText", "friday")
+            })
             return
         }
 
@@ -605,6 +610,16 @@ class FridayForegroundService : Service() {
 
         // Transcribe voice segment with Groq Whisper
         transcribeWithGroqWhisper(wavBytes) { transcript ->
+            if (transcript == null) {
+                Log.w(TAG, "STT failed (rate limit/network). Falling back to acoustic wake detection.")
+                sendEventToJS("onWakeWordDetected", Arguments.createMap().apply {
+                    putString("wakeWord", "friday")
+                    putString("command", "")
+                    putString("fullText", "friday")
+                })
+                return@transcribeWithGroqWhisper
+            }
+
             val clean = transcript.trim()
 
             // CRITICAL: Strict verification gate — if transcription does NOT contain "Friday", silently discard!
@@ -646,7 +661,7 @@ class FridayForegroundService : Service() {
     // 3. GROQ WHISPER DIRECT PCM-TO-TEXT HTTP DISPATCH (with Fallback)
     // =========================================================================
 
-    private fun tryGroq(wavData: ByteArray, language: String?, key: String): String {
+    private fun tryGroq(wavData: ByteArray, language: String?, key: String): String? {
         val models = arrayOf("whisper-large-v3-turbo", "whisper-large-v3")
         for (model in models) {
             try {
@@ -683,10 +698,10 @@ class FridayForegroundService : Service() {
                 Log.w(TAG, "Groq Whisper request failed for model $model: ${e.message}")
             }
         }
-        return ""
+        return null
     }
 
-    private fun tryOpenAI(wavData: ByteArray, language: String?, key: String): String {
+    private fun tryOpenAI(wavData: ByteArray, language: String?, key: String): String? {
         try {
             val requestBodyBuilder = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
@@ -715,38 +730,43 @@ class FridayForegroundService : Service() {
         } catch (e: Exception) {
             Log.w(TAG, "OpenAI Whisper request failed: ${e.message}")
         }
-        return ""
+        return null
     }
 
     private fun transcribeWithGroqWhisper(
         wavData: ByteArray,
         language: String? = null,
-        onResult: (String) -> Unit
+        onResult: (String?) -> Unit
     ) {
         httpExecutor.execute {
-            var transcript = ""
+            var transcript: String? = null
             val keysToTry = mutableListOf<Pair<String, String>>()
             if (groqApiKey.isNotBlank()) keysToTry.add(Pair("groq", groqApiKey.trim()))
             if (groqApiKey2.isNotBlank()) keysToTry.add(Pair("groq", groqApiKey2.trim()))
             if (openaiApiKey.isNotBlank()) keysToTry.add(Pair("openai", openaiApiKey.trim()))
 
             for ((type, key) in keysToTry) {
-                transcript = if (type == "groq") {
+                val res = if (type == "groq") {
                     tryGroq(wavData, language, key)
                 } else {
                     tryOpenAI(wavData, language, key)
                 }
                 
-                if (transcript.isNotBlank()) {
+                if (res != null) {
+                    transcript = res
                     // Success, clear backoff
                     rateLimitBackoffUntil = 0L
                     break
                 }
             }
 
-            if (transcript.isBlank() && keysToTry.isNotEmpty()) {
-                Log.w(TAG, "All STT APIs failed or rate-limited. Setting backoff for fallback.")
-                rateLimitBackoffUntil = SystemClock.elapsedRealtime() + 60000L
+            if (transcript == null) {
+                if (keysToTry.isNotEmpty()) {
+                    Log.w(TAG, "All STT APIs failed or rate-limited. Setting backoff for fallback.")
+                    rateLimitBackoffUntil = SystemClock.elapsedRealtime() + 60000L
+                } else {
+                    Log.w(TAG, "No STT keys available.")
+                }
             }
 
             mainHandler.post { onResult(transcript) }
