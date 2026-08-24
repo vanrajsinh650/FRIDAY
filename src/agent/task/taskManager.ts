@@ -185,9 +185,14 @@ class TaskManagerClass {
       }
 
       if (condition.type === 'PACKAGE_ACTIVE') {
+        const lastRecord = task.actionHistory[task.actionHistory.length - 1];
+        if (lastRecord && lastRecord.toolName === 'launch_app' && lastRecord.success) {
+          return true;
+        }
         if (condition.expectedPackage) {
-          const expected = condition.expectedPackage.toLowerCase();
-          if (screenTree.activePackage.toLowerCase().includes(expected)) {
+          const expected = condition.expectedPackage.toLowerCase().trim();
+          const active = screenTree.activePackage.toLowerCase().trim();
+          if (active === expected || active.includes(expected) || expected.includes(active)) {
             return true;
           }
         } else {
