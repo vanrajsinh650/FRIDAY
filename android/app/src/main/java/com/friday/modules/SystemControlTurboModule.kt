@@ -35,99 +35,41 @@ class SystemControlTurboModule(private val reactContext: ReactApplicationContext
 
     @ReactMethod
     fun launchApp(packageName: String, promise: Promise) {
-        try {
-            val pm = reactContext.packageManager
-            val query = packageName.lowercase().trim()
-            var launchIntent = pm.getLaunchIntentForPackage(query)
+        CoroutineScope(Dispatchers.Default).launch {
+            try {
+                val pm = reactContext.packageManager
+                val query = packageName.trim()
 
-            // Priority 1: Exact package name exists
-            if (launchIntent != null) {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                reactContext.startActivity(launchIntent)
-                promise.resolve(true)
-                return
-            }
+                // Priority 1: Check direct exact package name
+                var launchIntent = pm.getLaunchIntentForPackage(query)
+                var targetPkg = query
 
-            // Priority 2: Known canonical map match
-            val canonicalMap = mapOf(
-                "youtube" to "com.google.android.youtube",
-                "whatsapp" to "com.whatsapp",
-                "chrome" to "com.android.chrome",
-                "instagram" to "com.instagram.android",
-                "spotify" to "com.spotify.music",
-                "maps" to "com.google.android.apps.maps",
-                "gmail" to "com.google.android.gm",
-                "photos" to "com.google.android.apps.photos",
-                "gallery" to "com.google.android.apps.photos",
-                "settings" to "com.android.settings",
-                "camera" to "com.android.camera",
-                "calculator" to "com.google.android.calculator",
-                "clock" to "com.google.android.deskclock",
-                "messages" to "com.google.android.apps.messaging",
-                "contacts" to "com.android.contacts",
-                "phone" to "com.google.android.dialer",
-                "telegram" to "org.telegram.messenger",
-                "playstore" to "com.android.vending",
-                "play store" to "com.android.vending"
-            )
-
-            canonicalMap[query]?.let { mappedPkg ->
-                val mapIntent = pm.getLaunchIntentForPackage(mappedPkg)
-                if (mapIntent != null) {
-                    mapIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    reactContext.startActivity(mapIntent)
-                    promise.resolve(true)
-                    return
-                }
-            }
-
-            // Priorities 3, 4, 5: Installed activities with strict ranking
-            val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
-                addCategory(Intent.CATEGORY_LAUNCHER)
-            }
-            val resolveInfos = pm.queryIntentActivities(mainIntent, 0)
-
-            var exactMatchPkg: String? = null
-            var startsWithMatchPkg: String? = null
-            var startsWithMinLength = Int.MAX_VALUE
-            var containsMatchPkg: String? = null
-
-            for (info in resolveInfos) {
-                val label = info.loadLabel(pm).toString().lowercase().trim()
-                val pkg = info.activityInfo.packageName.lowercase()
-
-                // Priority 3: Exact label match
-                if (label == query) {
-                    exactMatchPkg = info.activityInfo.packageName
-                    break
-                }
-                // Priority 4: Label startsWith query (sorted by shortest label length so "YouTube" beats "YouTube Music")
-                else if (label.startsWith(query)) {
-                    if (label.length < startsWithMinLength) {
-                        startsWithMinLength = label.length
-                        startsWithMatchPkg = info.activityInfo.packageName
+                if (launchIntent == null) {
+                    // Priority 2: Universal Dynamic Phonetic & Fuzzy Registry
+                    val registry = com.friday.registry.AppDiscoveryRegistry.getInstance(reactContext)
+                    val matchResult = registry.findBestMatch(query)
+                    if (matchResult != null) {
+                        targetPkg = matchResult.app.packageName
+                        launchIntent = pm.getLaunchIntentForPackage(targetPkg)
                     }
                 }
-                // Priority 5: Label contains query or package contains query
-                else if (label.contains(query) || pkg.contains(query)) {
-                    if (containsMatchPkg == null) {
-                        containsMatchPkg = info.activityInfo.packageName
+
+                if (launchIntent != null) {
+                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                    reactContext.startActivity(launchIntent)
+                    withContext(Dispatchers.Main) {
+                        promise.resolve(true)
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        promise.resolve(false)
                     }
                 }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    promise.reject("LAUNCH_FAILED", e.message)
+                }
             }
-
-            val targetPkg = exactMatchPkg ?: startsWithMatchPkg ?: containsMatchPkg
-            val finalIntent = if (targetPkg != null) pm.getLaunchIntentForPackage(targetPkg) else null
-
-            if (finalIntent != null) {
-                finalIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                reactContext.startActivity(finalIntent)
-                promise.resolve(true)
-            } else {
-                promise.resolve(false)
-            }
-        } catch (e: Exception) {
-            promise.reject("LAUNCH_FAILED", e.message)
         }
     }
 

@@ -197,29 +197,16 @@ export class Planner {
     //    "open youtube" = yes, "open youtube and play video" = NO (that's MEDIA_PLAYBACK)
     if (task?.goalType === 'APP_OPERATION') {
       if (actionCount === 0) {
-        const appToOpen = (task.currentApp || lowerGoal.replace(/^(open|launch|start|khol|chalu|please open)\s+/i, '').replace(/\s+app$/i, '')).trim();
-        const canonicalAppMap: Record<string, string> = {
-          youtube: 'com.google.android.youtube',
-          whatsapp: 'com.whatsapp',
-          chrome: 'com.android.chrome',
-          maps: 'com.google.android.apps.maps',
-          spotify: 'com.spotify.music',
-          music: 'com.google.android.apps.youtube.music',
-          camera: 'com.android.camera',
-          settings: 'com.android.settings',
-          gallery: 'com.google.android.apps.photos',
-          photos: 'com.google.android.apps.photos',
-          instagram: 'com.instagram.android',
-          telegram: 'org.telegram.messenger',
-          messages: 'com.google.android.apps.messaging',
-          clock: 'com.google.android.deskclock',
-          calculator: 'com.google.android.calculator',
-        };
-        const targetPackage = canonicalAppMap[appToOpen.toLowerCase()] || appToOpen;
+        const appToOpen = (
+          task.currentApp ||
+          lowerGoal
+            .replace(/^(open|launch|start|khol|chalu|please open|go in|go into|go to|head into|take me to)\s+/i, '')
+            .replace(/\s+app$/i, '')
+        ).trim();
         return {
           id: `step_${Date.now()}`,
           toolName: 'launch_app',
-          parameters: { packageNameOrName: targetPackage },
+          parameters: { packageNameOrName: appToOpen },
           description: `Launch ${appToOpen}`,
         };
       }

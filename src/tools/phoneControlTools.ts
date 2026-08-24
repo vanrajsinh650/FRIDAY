@@ -1,54 +1,29 @@
 import { ToolDefinition } from './types';
 import { AccessibilityModule } from '../native/AccessibilityModule';
 import { SystemControlModule } from '../native/SystemControlModule';
+import { AppResolver } from '../services/AppResolver';
 
 export const launchAppPrimitiveTool: ToolDefinition = {
   name: 'launch_app',
-  description: 'Launches an application by package name or common app name and waits for it to become the active foreground window.',
+  description: 'Dynamically resolves and launches any application on the device by spoken name, phonetic alias, or package identifier (zero hardcoding).',
   parameters: {
     type: 'object',
     properties: {
-      packageNameOrName: { type: 'string', description: 'Application name or Android package identifier (e.g. youtube, whatsapp, chrome)' },
+      packageNameOrName: { type: 'string', description: 'Application name or Android package identifier (e.g. youtube, whatsapp, chrome, any new app)' },
     },
     required: ['packageNameOrName'],
   },
   execute: async ({ packageNameOrName }) => {
     const startTime = Date.now();
-    const query = packageNameOrName.trim().toLowerCase();
-
-    const staticMap: Record<string, string> = {
-      youtube: 'com.google.android.youtube',
-      whatsapp: 'com.whatsapp',
-      chrome: 'com.android.chrome',
-      maps: 'com.google.android.apps.maps',
-      spotify: 'com.spotify.music',
-      clock: 'com.google.android.deskclock',
-      settings: 'com.android.settings',
-      camera: 'com.android.camera',
-      calculator: 'com.google.android.calculator',
-      instagram: 'com.instagram.android',
-      telegram: 'org.telegram.messenger',
-      messages: 'com.google.android.apps.messaging',
-      gallery: 'com.google.android.apps.photos',
-      photos: 'com.google.android.apps.photos',
-      albums: 'com.vivo.gallery',
-    };
-
-    const targetPkg = staticMap[query] || packageNameOrName;
-    let ok = await SystemControlModule.launchApp(targetPkg);
-    if (!ok && targetPkg !== query) {
-      ok = await SystemControlModule.launchApp(query);
-    }
-
-    // State-aware wait for app transition
-    const foregroundReached = await AccessibilityModule.waitForPackage(targetPkg, 3000);
+    const result = await AppResolver.launch(packageNameOrName);
 
     return {
-      success: ok,
+      success: result.success,
       data: {
-        launchedPackage: targetPkg,
+        launchedPackage: result.packageName || packageNameOrName,
         appName: packageNameOrName,
-        foregroundReached,
+        foregroundReached: result.foregroundReached,
+        error: result.error,
       },
       durationMs: Date.now() - startTime,
     };

@@ -1,16 +1,27 @@
 import { GoalType, TaskState, TerminalCondition, SteeringUpdate } from './types';
 import { ScreenTree } from '../../native/types';
 import { SessionManager } from '../session/sessionManager';
+import { IntentValidationFilter } from '../intent/IntentValidationFilter';
 
 class TaskManagerClass {
   private activeTask: TaskState | null = null;
 
   createTask(rawGoal: string, targetApp?: string, entities?: Record<string, string>): TaskState {
     const lower = rawGoal.toLowerCase();
+    const validated = IntentValidationFilter.filterAndDisambiguate(rawGoal);
     let goalType: GoalType = 'APP_OPERATION';
     const terminalConditions: TerminalCondition[] = [];
 
-    if (
+    // 1. Pure Navigation (e.g. "go in WhatsApp", "open YouTube", "launch Camera")
+    if (validated.intentClass === 'NAVIGATION') {
+      goalType = 'APP_OPERATION';
+      terminalConditions.push({
+        type: 'PACKAGE_ACTIVE',
+        expectedPackage: targetApp,
+        description: 'Application successfully opened in foreground',
+      });
+    } else if (
+      validated.goalType === 'MEDIA_PLAYBACK' ||
       lower.includes('play ') ||
       lower.includes('song') ||
       lower.includes('video') ||
@@ -25,12 +36,9 @@ class TaskManagerClass {
         description: 'YouTube video selected, opened, and playback verified',
       });
     } else if (
-      lower.includes('whatsapp') ||
-      lower.includes('send ') ||
-      lower.includes('message') ||
-      lower.includes('msg') ||
-      lower.includes('sms') ||
-      lower.includes('bhej')
+      validated.goalType === 'MESSAGING' ||
+      ((lower.includes('send ') || lower.includes('message') || lower.includes('msg') || lower.includes('sms') || lower.includes('bhej')) &&
+        (lower.includes('to ') || lower.includes('that ') || lower.includes('saying ')))
     ) {
       goalType = 'MESSAGING';
       terminalConditions.push({
