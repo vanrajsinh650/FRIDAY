@@ -38,6 +38,26 @@ class SpeechRecognizerTurboModule(private val reactContext: ReactApplicationCont
     }
 
     @ReactMethod
+    fun setApiKeys(groqKey1: String?, groqKey2: String?, groqKey3: String?, openaiKey: String?, promise: Promise) {
+        if (!groqKey1.isNullOrBlank()) FridayForegroundService.groqApiKey = groqKey1
+        if (!groqKey2.isNullOrBlank()) FridayForegroundService.groqApiKey2 = groqKey2
+        if (!groqKey3.isNullOrBlank()) FridayForegroundService.groqApiKey3 = groqKey3
+        if (!openaiKey.isNullOrBlank()) FridayForegroundService.openaiApiKey = openaiKey
+        try {
+            reactContext.getSharedPreferences("friday_prefs", android.content.Context.MODE_PRIVATE)
+                .edit()
+                .apply {
+                    if (!groqKey1.isNullOrBlank()) putString("groq_api_key", groqKey1)
+                    if (!groqKey2.isNullOrBlank()) putString("groq_api_key_2", groqKey2)
+                    if (!groqKey3.isNullOrBlank()) putString("groq_api_key_3", groqKey3)
+                    if (!openaiKey.isNullOrBlank()) putString("openai_api_key", openaiKey)
+                }
+                .apply()
+        } catch (_: Exception) {}
+        promise.resolve(true)
+    }
+
+    @ReactMethod
     fun startListening(language: String?, promise: Promise) {
         FridayForegroundService.activeReactContext = reactContext
         FridayForegroundService.ensureStarted(reactContext)

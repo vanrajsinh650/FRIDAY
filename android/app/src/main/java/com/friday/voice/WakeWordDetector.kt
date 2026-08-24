@@ -6,7 +6,7 @@ import kotlin.math.max
 import kotlin.math.min
 
 class WakeWordDetector(
-    private var sensitivity: Float = 0.65f,
+    private var sensitivity: Float = 0.70f,
     private val onWakeDetected: (confidence: Float, latencyMs: Long, preRollAudio: ShortArray?) -> Unit,
     private val onTelemetryUpdate: (rmsDb: Float, noiseFloorDb: Float, isVoice: Boolean, wakeConfidence: Float) -> Unit
 ) {
@@ -14,7 +14,7 @@ class WakeWordDetector(
     private val preprocessor = FarFieldAudioPreprocessor()
     private var isRunning = false
     private var lastWakeTimestamp = 0L
-    private val cooldownMs = 1200L
+    private val cooldownMs = 1500L
 
     // Rolling frame buffer for speech segment analysis (up to ~2.5 seconds)
     private val speechFrameBuffer = ArrayList<FarFieldAudioPreprocessor.AudioFrameFeatures>(80)

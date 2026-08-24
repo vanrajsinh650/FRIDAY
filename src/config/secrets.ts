@@ -13,7 +13,7 @@
 // that shipped as a dev fallback. Keeping the literal in exactly one file (here)
 // is what makes that rotation a one-line change instead of a repo-wide hunt.
 
-export type SecretKey = 'GROQ_API_KEY' | 'NVIDIA_API_KEY' | 'OPENAI_API_KEY';
+export type SecretKey = 'GROQ_API_KEY' | 'GROQ_API_KEY_2' | 'GROQ_API_KEY_3' | 'NVIDIA_API_KEY' | 'OPENAI_API_KEY';
 
 let localSecrets: Partial<Record<SecretKey, string>> = {};
 try {
@@ -24,6 +24,8 @@ try {
 // Dev-only fallbacks. Empty string means "no default — must come from env/store/local".
 const DEV_FALLBACKS: Record<SecretKey, string> = {
   GROQ_API_KEY: '',
+  GROQ_API_KEY_2: '',
+  GROQ_API_KEY_3: '',
   NVIDIA_API_KEY: '',
   OPENAI_API_KEY: '',
 };

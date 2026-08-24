@@ -30,9 +30,15 @@ export class VoicePipeline {
     if (this.wakeWordSub) return;
 
     try {
-      const groqKey = useSettingsStore.getState().groqApiKey || getSecret('GROQ_API_KEY');
-      if (groqKey && FridaySpeechRecognizerNative?.setApiKey) {
-        FridaySpeechRecognizerNative.setApiKey(groqKey).catch(() => {});
+      const groqKey1 = useSettingsStore.getState().groqApiKey || getSecret('GROQ_API_KEY');
+      const groqKey2 = getSecret('GROQ_API_KEY_2');
+      const groqKey3 = getSecret('GROQ_API_KEY_3');
+      const openaiKey = getSecret('OPENAI_API_KEY');
+
+      if (FridaySpeechRecognizerNative?.setApiKeys) {
+        FridaySpeechRecognizerNative.setApiKeys(groqKey1, groqKey2, groqKey3, openaiKey).catch(() => {});
+      } else if (groqKey1 && FridaySpeechRecognizerNative?.setApiKey) {
+        FridaySpeechRecognizerNative.setApiKey(groqKey1).catch(() => {});
       }
     } catch (_e) {}
 

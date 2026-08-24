@@ -93,10 +93,7 @@ export const AssistantScreen: React.FC<any> = ({ navigation }) => {
   }, []);
 
   const handleOrbPress = async () => {
-    const agent = new FridayAgent();
-    await VoicePipeline.handleVoiceTurn(async (goal) => {
-      return await agent.executeGoal(goal);
-    });
+    await VoicePipeline.startVoiceSession();
   };
 
   const handleTextCommand = async () => {
