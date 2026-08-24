@@ -365,11 +365,16 @@ export class Planner {
         const editableBox = snapshot.screenTree.nodes.find((n) => n.isEditable);
         const searchBox =
           editableBox ||
-          snapshot.screenTree.nodes.find(
-            (n) =>
-              (n.contentDescription || '').toLowerCase().includes('search') ||
-              (n.text || '').toLowerCase().includes('search')
-          );
+          snapshot.screenTree.nodes.find((n) => {
+            const desc = (n.contentDescription || '').toLowerCase();
+            const text = (n.text || '').toLowerCase();
+            const id = (n.id || '').toLowerCase();
+            // Strictly exclude YouTube Voice Search mic button
+            if (desc.includes('voice') || desc.includes('mic') || desc.includes('speak') || text.includes('voice') || text.includes('mic')) {
+              return false;
+            }
+            return desc.includes('search') || text.includes('search') || id.includes('search_button') || id.includes('menu_search');
+          });
 
         if (searchBox) {
           if (searchBox.isEditable) {

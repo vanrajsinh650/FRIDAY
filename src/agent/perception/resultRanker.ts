@@ -60,15 +60,17 @@ export class ResultRanker {
   // real content item — not a search box, nav chrome, or a bare icon.
   static isResultCandidate(node: UINode, tree: ScreenTree): boolean {
     if (!node.isClickable || !node.isVisible || node.isEditable) return false;
-    const title = (node.text || '').trim();
+    const title = (node.text || node.contentDescription || '').trim();
     if (title.length < 4) return false;
 
     const hay = `${node.text || ''} ${node.contentDescription || ''} ${node.id || ''}`.toLowerCase();
+    // Strictly exclude voice search mic buttons and navigation chrome
+    if (hay.includes('voice') || hay.includes('mic') || hay.includes('search with your voice')) return false;
     if (CHROME_HINTS.some((h) => hay.includes(h))) return false;
 
     // A result card occupies a meaningful slice of the screen width. Guard
     // against divide-by-zero for degenerate trees.
-    if (tree.screenWidth > 0 && node.bounds.width < tree.screenWidth * 0.4) return false;
+    if (tree.screenWidth > 0 && node.bounds.width < tree.screenWidth * 0.35) return false;
     return true;
   }
 
@@ -80,7 +82,7 @@ export class ResultRanker {
     const maxViews = Math.max(1, ...candidates.map((c) => parseViewCount(c.contentDescription || '')));
 
     const ranked = candidates.map((node, index) => {
-      const title = (node.text || '').trim();
+      const title = (node.text || node.contentDescription || '').trim();
       const titleTokens = new Set(tokenize(title));
       const overlap = qTokens.filter((t) => titleTokens.has(t)).length;
       const coverage = overlap / qTokens.length; // 0..1 — how much of the request the title covers
@@ -109,12 +111,10 @@ export class ResultRanker {
   // or when nothing clears a minimal relevance bar (avoid confidently opening an
   // irrelevant item; the caller falls back to the platform's own first result).
   static pickBestResult(tree: ScreenTree, query: string): RankedResult | null {
+    if (!query || query.trim().length === 0) return null;
     const ranked = this.rankResults(tree, query);
     if (ranked.length === 0) return null;
     const best = ranked[0];
-    // Require at least one real token overlap (coverage contributes ≥10 to score
-    // per matched token). A card that only won on popularity/position isn't a
-    // confident match.
     const qTokens = tokenize(query);
     const titleTokens = new Set(tokenize(best.matchedTitle));
     const hasOverlap = qTokens.some((t) => titleTokens.has(t));

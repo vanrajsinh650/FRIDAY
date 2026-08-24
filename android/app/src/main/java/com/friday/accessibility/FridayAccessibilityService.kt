@@ -2,6 +2,7 @@ package com.friday.accessibility
 
 import android.accessibilityservice.AccessibilityService
 import android.graphics.Rect
+import android.os.Build
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -123,6 +124,14 @@ class FridayAccessibilityService : AccessibilityService() {
     private fun findNodeByTextOrDesc(node: AccessibilityNodeInfo, query: String, matchExact: Boolean): AccessibilityNodeInfo? {
         val text = node.text?.toString()?.lowercase()
         val desc = node.contentDescription?.toString()?.lowercase()
+        val id = node.viewIdResourceName?.lowercase() ?: ""
+
+        // If query is looking for search, explicitly exclude voice/mic search nodes
+        if (query.contains("search")) {
+            if (desc?.contains("voice") == true || desc?.contains("mic") == true || text?.contains("voice") == true || id.contains("voice")) {
+                return null
+            }
+        }
 
         val textMatches = if (matchExact) text == query else text?.contains(query) == true
         val descMatches = if (matchExact) desc == query else desc?.contains(query) == true
@@ -149,6 +158,8 @@ class FridayAccessibilityService : AccessibilityService() {
             
             // Try accessibility action click first
             val actionClicked = if (card.isClickable) card.performAction(AccessibilityNodeInfo.ACTION_CLICK) else false
+            val cx = bounds.centerX().toFloat()
+            val cy = bounds.centerY().toFloat()
             card.recycle()
             root.recycle()
 
@@ -156,7 +167,7 @@ class FridayAccessibilityService : AccessibilityService() {
 
             if (bounds.width() > 0 && bounds.height() > 0) {
                 CoroutineScope(Dispatchers.Main).launch {
-                    GestureDispatcher.click(this@FridayAccessibilityService, bounds.centerX().toFloat(), bounds.centerY().toFloat())
+                    GestureDispatcher.click(this@FridayAccessibilityService, cx, cy)
                 }
                 return true
             }
@@ -179,12 +190,18 @@ class FridayAccessibilityService : AccessibilityService() {
 
         val desc = (node.contentDescription ?: "").toString().lowercase()
         val text = (node.text ?: "").toString().lowercase()
+        val id = (node.viewIdResourceName ?: "").lowercase()
 
-        // Look for video elements or large clickable content cards
+        // Strictly ignore voice / mic / search bar / nav header
+        if (desc.contains("voice") || desc.contains("mic") || id.contains("search") || id.contains("voice") || id.contains("header")) {
+            return null
+        }
+
+        // Look for video elements or large clickable content cards in YouTube
         val isVideoLike = desc.contains("play") || desc.contains("video") || desc.contains("ago") || desc.contains("views") ||
-                text.contains("views") || desc.contains("watch") || desc.contains("channel")
+                text.contains("views") || desc.contains("watch") || id.contains("thumbnail") || id.contains("video_title")
 
-        if (bounds.top > 250 && bounds.top < 1400 && bounds.height() > 120 && bounds.width() > 250) {
+        if (bounds.top > 180 && bounds.top < 1800 && bounds.height() > 100 && bounds.width() > 250) {
             if (node.isClickable || isVideoLike) {
                 return node
             }
@@ -280,18 +297,24 @@ class FridayAccessibilityService : AccessibilityService() {
         val root = rootInActiveWindow ?: return false
         val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
         if (focused != null) {
-            val ok = focused.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                try {
+                    val imeOk = focused.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
+                    if (imeOk) {
+                        focused.recycle()
+                        root.recycle()
+                        return true
+                    }
+                } catch (_: Exception) {}
+            }
             focused.recycle()
-            root.recycle()
-            if (ok) return true
-        } else {
-            root.recycle()
         }
+        root.recycle()
 
         // Tap bottom-right keyboard Enter/Search action area
         val metrics = resources.displayMetrics
         val enterX = metrics.widthPixels - 100f
-        val enterY = metrics.heightPixels - 100f
+        val enterY = metrics.heightPixels - 120f
         CoroutineScope(Dispatchers.Main).launch {
             GestureDispatcher.click(this@FridayAccessibilityService, enterX, enterY)
         }
