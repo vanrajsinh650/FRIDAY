@@ -53,18 +53,20 @@ export class VoicePipeline {
       async (data: { wakeWord: string; command: string; fullText: string }) => {
         if (this.isRunning) return;
 
-        const rawCmd = (data?.command || '').trim();
+        const rawCmd = (data?.command || '').replace(/^[\s.,;:!?-]+|[\s.,;:!?-]+$/, '').trim();
+        const hasAlphanumeric = /[a-zA-Z0-9]/.test(rawCmd);
+        const validCmd = hasAlphanumeric ? rawCmd : '';
         const fullText = (data?.fullText || '').trim();
         const now = Date.now();
 
         // Strict Safety Gate: Verify that the transcribed audio actually addressed "Friday"
         const wakeWordRegex = /\b(?:hey|hi|ok|okay|hello|yo|aye|suno|arre|dear)?\s*(?:friday|fri\s*day|fried\s*day|fry\s*day|freeday|frida|fridays|friday's|vega|veega|vaga)\b/i;
-        if (!wakeWordRegex.test(fullText) && !wakeWordRegex.test(rawCmd)) {
+        if (!wakeWordRegex.test(fullText) && !wakeWordRegex.test(validCmd)) {
           return;
         }
 
         // Prevent immediate duplicate bursts
-        const cmdKey = (rawCmd || fullText).toLowerCase();
+        const cmdKey = (validCmd || fullText).toLowerCase();
         if (cmdKey && cmdKey === this.lastHandledCommand && now - this.lastHandledTimestamp < 3000) {
           return;
         }
@@ -76,12 +78,12 @@ export class VoicePipeline {
 
         await SystemControlModule.pauseMediaPlayback();
 
-        const evaluation = ActionSafetyGuard.evaluate(rawCmd);
+        const evaluation = validCmd ? ActionSafetyGuard.evaluate(validCmd) : { type: 'NOISE', confidence: 0 };
 
         // CASE 1: FLUID SINGLE-BREATH COMMAND or INCOMPLETE ACTION ("Friday, what is the battery level", "Friday, open YouTube")
-        if (evaluation.type === 'ACTIONABLE' || evaluation.type === 'CONVERSATIONAL' || evaluation.type === 'INCOMPLETE_ACTION') {
+        if (validCmd && (evaluation.type === 'ACTIONABLE' || evaluation.type === 'CONVERSATIONAL' || evaluation.type === 'INCOMPLETE_ACTION')) {
           FloatingOverlayModule.showOverlay('Listening...', 'LISTENING');
-          await this.startVoiceSession(rawCmd);
+          await this.startVoiceSession(validCmd);
         } else {
           // CASE 2: VERIFIED STANDALONE WAKE WORD ("Friday" / "Hey Friday" alone)
           // Speaks "Yes, Boss?" greeting and opens active window for command

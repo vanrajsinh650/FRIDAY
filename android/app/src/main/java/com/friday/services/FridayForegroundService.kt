@@ -574,7 +574,9 @@ class FridayForegroundService : Service() {
             Pattern.CASE_INSENSITIVE
         )
         val matcher = pattern.matcher(text)
-        return if (matcher.find()) (matcher.group(1) ?: "").trim() else ""
+        val rawTrailing = if (matcher.find()) (matcher.group(1) ?: "").trim() else ""
+        val cleanTrailing = rawTrailing.replace(Regex("""^[\s.,;:!?-]+|[\s.,;:!?-]+$"""), "").trim()
+        return if (cleanTrailing.any { it.isLetterOrDigit() }) cleanTrailing else ""
     }
 
     // =========================================================================
