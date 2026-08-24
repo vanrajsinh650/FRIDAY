@@ -174,7 +174,7 @@ export class SpeechRecognizer {
       });
 
       finalSub = DeviceEventEmitter.addListener('onSpeechFinalResult', (data: { transcript: string }) => {
-        const text = data?.transcript || lastPartial;
+        const text = typeof data?.transcript === 'string' ? data.transcript : lastPartial;
         finishWithTranscript(text, 'speech_final');
       });
 

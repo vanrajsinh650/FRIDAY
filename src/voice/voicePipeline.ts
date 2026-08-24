@@ -52,7 +52,7 @@ export class VoicePipeline {
         const now = Date.now();
 
         // Strict Safety Gate: Verify that the transcribed audio actually addressed "Friday"
-        const wakeWordRegex = /\b(?:hey|hi|ok|okay|hello|yo|aye|suno|arre|dear)?\s*(?:friday|fri\s*day|fried\s*day|fry\s*day|freeday|frida|fridays|friday's)\b/i;
+        const wakeWordRegex = /\b(?:hey|hi|ok|okay|hello|yo|aye|suno|arre|dear)?\s*(?:friday|fri\s*day|fried\s*day|fry\s*day|freeday|frida|fridays|friday's|vega|veega|vaga)\b/i;
         if (!wakeWordRegex.test(fullText) && !wakeWordRegex.test(rawCmd)) {
           return;
         }
@@ -210,12 +210,7 @@ export class VoicePipeline {
             await PocketTTSEngine.waitForCompletion();
           }
 
-          // Device automation actions (like open app, toggle wifi) finish in single turn
-          if (isAction) {
-            break;
-          }
-
-          // Conversational / Q&A / Knowledge queries: stay in Active Follow-Up Window!
+          // Both device automation actions and conversational queries stay in Active Follow-Up Window
           nextQuery = null;
         }
 
@@ -262,8 +257,9 @@ export class VoicePipeline {
 
         // Strip any optional "Friday" if user happened to say it again
         let cleanFollowUp = capturedText;
-        if (/^(?:hey\s+|hi\s+|ok\s+|okay\s+)?friday[\s,]+/i.test(cleanFollowUp)) {
-          cleanFollowUp = cleanFollowUp.replace(/^(?:hey\s+|hi\s+|ok\s+|okay\s+)?friday[\s,]+/i, '').trim();
+        const wakeWordPrefixRegex = /^(?:(?:hey|hi|ok|okay|hello|yo|aye|suno|arre|dear)\s+)?(?:friday|fri\s*day|fried\s*day|fry\s*day|freeday|frida|fridays|friday's|vega|veega|vaga)[\s,]+/i;
+        if (wakeWordPrefixRegex.test(cleanFollowUp)) {
+          cleanFollowUp = cleanFollowUp.replace(wakeWordPrefixRegex, '').trim();
         }
 
         nextQuery = cleanFollowUp || capturedText;

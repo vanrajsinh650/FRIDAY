@@ -15,6 +15,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AutomaticGainControl
+import android.media.audiofx.NoiseSuppressor
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -42,9 +43,11 @@ import java.nio.ByteOrder
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
+import kotlin.math.abs
 import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.sqrt
+import kotlin.math.tanh
 
 /**
  * FridayForegroundService — 24/7 Silent Background Voice HAL & Active Multi-Turn Engine.
@@ -83,6 +86,7 @@ class FridayForegroundService : Service() {
     private var activeQueryRecord: AudioRecord? = null
     private var activeAgc: AutomaticGainControl? = null
     private var activeAec: AcousticEchoCanceler? = null
+    private var activeNs: NoiseSuppressor? = null
     private val activePcmBuffer = ByteArrayOutputStream(128000)
     private var lastRmsEmitTime = 0L
 
@@ -258,14 +262,21 @@ class FridayForegroundService : Service() {
                                 activeAec = AcousticEchoCanceler.create(sessionId)?.apply { enabled = true }
                             }
                         } catch (_: Exception) {}
+                        try {
+                            if (NoiseSuppressor.isAvailable()) {
+                                activeNs = NoiseSuppressor.create(sessionId)?.apply { enabled = true }
+                            }
+                        } catch (_: Exception) {}
                     }
                     record.startRecording()
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to start AudioRecord for active query: ${e.message}")
                     try { activeAgc?.release() } catch (_: Exception) {}
                     try { activeAec?.release() } catch (_: Exception) {}
+                    try { activeNs?.release() } catch (_: Exception) {}
                     activeAgc = null
                     activeAec = null
+                    activeNs = null
                     record.release()
                     activeQueryRecord = null
                     isActiveQueryRecording = false
@@ -279,8 +290,11 @@ class FridayForegroundService : Service() {
 
                 var hasDetectedSpeech = false
                 var consecutiveSilenceFrames = 0
-                val silenceThresholdFrames = 40 // ~1.28s silence after speech to endpoint
                 val queryStartTime = System.currentTimeMillis()
+
+                var noiseFloorInitFrames = 0
+                var noiseFloorInitSum = 0f
+                var currentNoiseFloorDb = -72f
 
                 sendEventToJS("onSpeechStart", null)
 
@@ -297,19 +311,48 @@ class FridayForegroundService : Service() {
                         continue
                     }
 
-                    if (isFridaySpeaking) continue
+                    val now = System.currentTimeMillis()
 
-                    // 1. Calculate RMS energy for UI waveform animation
-                    var sumSquare = 0.0
-                    for (i in 0 until readShorts) {
-                        val sample = rawBuffer[i].toDouble()
-                        sumSquare += sample * sample
+                    // Fix isFridaySpeaking race condition
+                    if (isFridaySpeaking) {
+                        if (now - queryStartTime < 2000L) {
+                            continue
+                        } else {
+                            isFridaySpeaking = false
+                        }
                     }
-                    val rms = sqrt(sumSquare / readShorts)
-                    val rmsDb = if (rms > 1.0) (20.0 * log10(rms / 32768.0)).toFloat() else -100f
+
+                    // 1. Apply Software Pre-Amp Boost with Smooth Soft-Knee Limiter & calculate RMS
+                    val gain = 3.5f
+                    var energySum = 0.0
+                    val threshold = 24000.0
+                    val maxCap = 32767.0
+                    val headroom = maxCap - threshold
+                    
+                    val amplifiedBuffer = ShortArray(readShorts)
+
+                    for (i in 0 until readShorts) {
+                        val raw = rawBuffer[i].toDouble()
+                        val boosted = raw * gain
+                        val absVal = abs(boosted)
+                        val saturated = if (absVal > threshold) {
+                            val excess = absVal - threshold
+                            val compressed = threshold + headroom * tanh(excess / headroom)
+                            if (boosted < 0) -compressed else compressed
+                        } else {
+                            boosted
+                        }
+                        val sVal = saturated.toInt().coerceIn(-32768, 32767).toShort()
+                        amplifiedBuffer[i] = sVal
+                        
+                        val sample = sVal.toDouble()
+                        energySum += sample * sample
+                    }
+
+                    val rms = sqrt(energySum / readShorts)
+                    val rmsDb = if (rms > 0.0) (20.0 * log10(rms / 32767.0)).toFloat().coerceIn(-100f, 0f) else -100f
                     val normalizedLevel = ((rmsDb + 60.0f) / 50.0f).coerceIn(0.0f, 1.0f) * 10.0f
 
-                    val now = System.currentTimeMillis()
                     if (now - lastRmsEmitTime > 50) {
                         lastRmsEmitTime = now
                         sendEventToJS("onSpeechVolumeChanged", Arguments.createMap().apply {
@@ -317,8 +360,23 @@ class FridayForegroundService : Service() {
                         })
                     }
 
-                    // 2. Simple VAD Energy Gate
-                    val isVoiceFrame = rmsDb > -42.0f
+                    // 2. Dynamic Asymmetric Noise Floor Tracking
+                    if (noiseFloorInitFrames < 35) {
+                        noiseFloorInitSum += rmsDb
+                        noiseFloorInitFrames++
+                        currentNoiseFloorDb = (noiseFloorInitSum / noiseFloorInitFrames).coerceIn(-90f, -40f)
+                    } else {
+                        if (rmsDb < currentNoiseFloorDb) {
+                            currentNoiseFloorDb = (0.85f * currentNoiseFloorDb + 0.15f * rmsDb).coerceIn(-90f, -35f)
+                        } else {
+                            currentNoiseFloorDb = (0.9995f * currentNoiseFloorDb + 0.0005f * rmsDb).coerceIn(-90f, -35f)
+                        }
+                    }
+
+                    // 3. Dynamic SNR-based VAD Gate
+                    val snr = rmsDb - currentNoiseFloorDb
+                    val isVoiceFrame = snr >= 2.0f && rmsDb > -75.0f
+
                     if (isVoiceFrame) {
                         hasDetectedSpeech = true
                         consecutiveSilenceFrames = 0
@@ -326,14 +384,15 @@ class FridayForegroundService : Service() {
                         consecutiveSilenceFrames++
                     }
 
-                    // Convert short array to raw PCM byte array (little-endian)
-                    ByteBuffer.wrap(byteBuffer).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().put(rawBuffer, 0, readShorts)
+                    // Convert amplified short array to raw PCM byte array (little-endian)
+                    ByteBuffer.wrap(byteBuffer).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().put(amplifiedBuffer, 0, readShorts)
                     synchronized(activePcmBuffer) {
                         activePcmBuffer.write(byteBuffer, 0, readShorts * 2)
                     }
 
-                    // 3. Endpoint detection: User spoke and then paused for ~1.28s, or safety max duration (20s)
-                    if (hasDetectedSpeech && consecutiveSilenceFrames >= silenceThresholdFrames) {
+                    // 4. Dynamic SNR-adaptive silence endpointing (clean speech endpoints in ~450ms / 14 frames)
+                    val dynamicSilenceThreshold = if (snr > 8.0f) 14 else if (snr > 4.0f) 20 else 40
+                    if (hasDetectedSpeech && consecutiveSilenceFrames >= dynamicSilenceThreshold) {
                         break
                     }
                     if (now - queryStartTime > 20000L) {
@@ -343,8 +402,10 @@ class FridayForegroundService : Service() {
 
                 try { activeAgc?.release() } catch (_: Exception) {}
                 try { activeAec?.release() } catch (_: Exception) {}
+                    try { activeNs?.release() } catch (_: Exception) {}
                 activeAgc = null
                 activeAec = null
+                    activeNs = null
                 try {
                     record.stop()
                     record.release()
@@ -378,8 +439,10 @@ class FridayForegroundService : Service() {
         isActiveQueryRecording = false
         try { activeAgc?.release() } catch (_: Exception) {}
         try { activeAec?.release() } catch (_: Exception) {}
+                    try { activeNs?.release() } catch (_: Exception) {}
         activeAgc = null
         activeAec = null
+                    activeNs = null
         try {
             activeQueryRecord?.stop()
             activeQueryRecord?.release()
@@ -431,7 +494,8 @@ class FridayForegroundService : Service() {
     }
 
     private var lastBackgroundTranscribeTimestamp = 0L
-    private val MIN_BACKGROUND_TRANSCRIBE_INTERVAL_MS = 800L
+    private val MIN_BACKGROUND_TRANSCRIBE_INTERVAL_MS = 2500L
+    private var rateLimitBackoffUntil = 0L
 
     private fun handleWakeDetected(preRollAudio: ShortArray?) {
         if (isFridaySpeaking || isActiveQueryRecording || preRollAudio == null || preRollAudio.isEmpty()) {
@@ -439,6 +503,11 @@ class FridayForegroundService : Service() {
         }
 
         val now = SystemClock.elapsedRealtime()
+        if (now < rateLimitBackoffUntil) {
+            Log.d(TAG, "Rate limit backoff active, skipping background wake check (${(rateLimitBackoffUntil - now) / 1000}s remaining)")
+            return
+        }
+
         if (now - lastBackgroundTranscribeTimestamp < MIN_BACKGROUND_TRANSCRIBE_INTERVAL_MS) {
             return
         }
@@ -520,7 +589,7 @@ class FridayForegroundService : Service() {
 
                     val langCode = if (!language.isNullOrBlank()) language.split("-", "_")[0].lowercase() else "en"
                     requestBodyBuilder.addFormDataPart("language", langCode)
-                    requestBodyBuilder.addFormDataPart("prompt", "FRIDAY, Hey Friday, Boss, Tony Stark, YouTube, WhatsApp, Taarak Mehta, open, play, call, send, search, volume, battery, alarms, flashlight, Vega.")
+                    requestBodyBuilder.addFormDataPart("prompt", "FRIDAY, Hey Friday, Boss, Tony Stark, YouTube, WhatsApp, Taarak Mehta, open, play, call, send, search, volume, battery, alarms, flashlight, Vega, Yes Boss, acknowledge, clear.")
 
                     val request = Request.Builder()
                         .url("https://api.groq.com/openai/v1/audio/transcriptions")
@@ -538,6 +607,9 @@ class FridayForegroundService : Service() {
                         } else {
                             val errStr = response.body?.string() ?: ""
                             Log.w(TAG, "Groq Whisper error on model $model [${response.code}]: $errStr")
+                            if (response.code == 429) {
+                                rateLimitBackoffUntil = SystemClock.elapsedRealtime() + 45000L
+                            }
                         }
                     }
 

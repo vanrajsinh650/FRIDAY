@@ -193,10 +193,10 @@ class WakeWordDetector(
         // Dynamic threshold mapped from sensitivity (sensitivity 0.82 -> threshold ~0.44)
         val wakeThreshold = (1.0f - sensitivity) * 0.35f + 0.38f
 
-        // High-sensitivity trigger condition (Groq Whisper in RAM performs ground-truth verification)
+        // Candidate trigger condition (Groq Whisper in RAM performs ground-truth verification)
         val isWake = compositeConfidence >= wakeThreshold &&
-                     (peakCount in 1..5 || isWhisperDominant) &&
-                     fricativeScore >= 0.40f
+                     (peakCount in 2..4 || (isWhisperDominant && peakCount >= 1)) &&
+                     fricativeScore >= 0.50f
 
         return PatternResult(isWake, compositeConfidence)
     }

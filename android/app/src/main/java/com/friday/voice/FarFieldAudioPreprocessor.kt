@@ -5,12 +5,16 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AutomaticGainControl
+import android.media.audiofx.NoiseSuppressor
 import android.os.Process
 import android.util.Log
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.math.tanh
 
@@ -89,6 +93,7 @@ class FarFieldAudioPreprocessor {
     private var audioRecord: AudioRecord? = null
     private var agc: AutomaticGainControl? = null
     private var aec: AcousticEchoCanceler? = null
+    private var ns: NoiseSuppressor? = null
 
     @Volatile
     private var isRecording = false
@@ -131,6 +136,7 @@ class FarFieldAudioPreprocessor {
      *
      * Crucial: If any candidate fails initialization, it is immediately released to prevent AudioFlinger track leaks.
      */
+    @android.annotation.SuppressLint("MissingPermission")
     private fun createAudioRecord(sampleRate: Int, baseBufferSize: Int): AudioRecord? {
         val audioSources = intArrayOf(
             MediaRecorder.AudioSource.VOICE_RECOGNITION,
@@ -211,6 +217,13 @@ class FarFieldAudioPreprocessor {
                     } catch (e: Exception) {
                         Log.w(TAG, "AcousticEchoCanceler attach failed: ${e.message}")
                     }
+                    try {
+                        if (NoiseSuppressor.isAvailable()) {
+                            ns = NoiseSuppressor.create(sessionId)?.apply { enabled = true }
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "NoiseSuppressor attach failed: ${e.message}")
+                    }
                 }
 
                 record.startRecording()
@@ -235,6 +248,24 @@ class FarFieldAudioPreprocessor {
                     var noiseFloorInitSum = 0f
                     var consecutiveErrors = 0
 
+                    // 2nd-order IIR Butterworth High-Pass Filter (fc=85 Hz, Q=0.707)
+                    val fs = sampleRate.toDouble()
+                    val fc = 85.0
+                    val w0 = 2.0 * PI * fc / fs
+                    val alpha = sin(w0) / (2.0 * 0.70710678)
+                    val cosW0 = cos(w0)
+                    val a0 = 1.0 + alpha
+                    val b0 = (1.0 + cosW0) / 2.0 / a0
+                    val b1 = -(1.0 + cosW0) / a0
+                    val b2 = (1.0 + cosW0) / 2.0 / a0
+                    val a1 = (-2.0 * cosW0) / a0
+                    val a2 = (1.0 - alpha) / a0
+
+                    var x1 = 0.0
+                    var x2 = 0.0
+                    var y1 = 0.0
+                    var y2 = 0.0
+
                     while (isRecording && audioRecord != null) {
                         val activeRec = audioRecord ?: break
                         val read = try {
@@ -255,8 +286,14 @@ class FarFieldAudioPreprocessor {
                         }
                         consecutiveErrors = 0
 
-                        // 1. Apply Software Pre-Amp Boost with Smooth Soft-Knee Limiter (C1 tanh compression)
-                        val gain = softwareGainFactor
+                        // 1. Calculate dynamic gain based on noise floor
+                        val gain = when {
+                            currentNoiseFloorDb < -75f -> 5.5f
+                            currentNoiseFloorDb <= -55f -> 3.5f
+                            else -> 1.8f
+                        }
+
+                        // 2. Apply HPF and Software Pre-Amp Boost with Smooth Soft-Knee Limiter
                         var energySum = 0.0
                         var zeroCrossings = 0
                         var highFreqEnergy = 0.0
@@ -266,7 +303,15 @@ class FarFieldAudioPreprocessor {
 
                         for (i in 0 until read) {
                             val raw = rawBuffer[i].toDouble()
-                            val boosted = raw * gain
+                            
+                            // High-pass filter
+                            val filtered = b0 * raw + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
+                            x2 = x1
+                            x1 = raw
+                            y2 = y1
+                            y1 = filtered
+                            
+                            val boosted = filtered * gain
                             val absVal = abs(boosted)
                             val saturated = if (absVal > threshold) {
                                 val excess = absVal - threshold
@@ -408,6 +453,9 @@ class FarFieldAudioPreprocessor {
                 aec?.release()
             } catch (_: Exception) {}
             try {
+                ns?.release()
+            } catch (_: Exception) {}
+            try {
                 audioRecord?.release()
             } catch (e: Exception) {
                 Log.w(TAG, "Error releasing AudioRecord: ${e.message}")
@@ -415,6 +463,7 @@ class FarFieldAudioPreprocessor {
 
             agc = null
             aec = null
+            ns = null
             audioRecord = null
         }
     }
