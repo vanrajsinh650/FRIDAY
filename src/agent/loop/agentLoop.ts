@@ -223,9 +223,9 @@ export class AgentLoop {
         finalSpokenResponse = 'Your message has been sent, Boss.';
       } else if (tool === 'launch_app') {
         const rawApp = lastAction?.parameters?.packageNameOrName || lastAction?.parameters?.packageName || 'app';
-        const cleanApp = rawApp.replace('com.google.android.', '').replace('com.', '');
+        const cleanApp = rawApp.replace('com.google.android.apps.', '').replace('com.google.android.', '').replace('com.', '');
         const formattedApp = cleanApp.charAt(0).toUpperCase() + cleanApp.slice(1);
-        finalSpokenResponse = `Opened ${formattedApp} for you, Boss.`;
+        finalSpokenResponse = `Opened ${formattedApp}, Boss. What's next?`;
       } else {
         finalSpokenResponse = 'Task completed, Boss.';
       }
@@ -236,6 +236,12 @@ export class AgentLoop {
       useAgentStore.getState().setAgentState('SUCCESS');
       useAgentStore.getState().setLastResponse(finalSpokenResponse);
       await FloatingOverlayModule.updateOverlay('Verified ✓', 'SUCCESS');
+      if (process.env.NODE_ENV !== 'test') {
+        setTimeout(() => {
+          FloatingOverlayModule.updateOverlay("What's next, Boss?", 'IDLE');
+          useAgentStore.getState().setAgentState('IDLE');
+        }, 2500);
+      }
     } else {
       if (task.goalType === 'MEDIA_PLAYBACK') {
         finalSpokenResponse = "I opened YouTube, but couldn't verify if the video started playing, Boss.";
