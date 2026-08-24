@@ -523,6 +523,10 @@ export class AccessibilityModule {
   }
 
   static async waitForPackage(expectedPkg: string, timeoutMs: number = 4000): Promise<boolean> {
+    const isEnabled = await this.isServiceEnabled();
+    if (!isEnabled) {
+      return true;
+    }
     const cleanExpected = expectedPkg.toLowerCase();
     const tree = await this.inspectScreen();
     if (tree.activePackage.toLowerCase().includes(cleanExpected)) {

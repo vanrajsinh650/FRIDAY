@@ -104,6 +104,8 @@ class FridayForegroundService : Service() {
 
         var activeReactContext: ReactContext? = null
         var groqApiKey: String = ""
+        var groqApiKey2: String = ""
+        var openaiApiKey: String = ""
 
         fun ensureStarted(context: Context) {
             try {
@@ -155,6 +157,8 @@ class FridayForegroundService : Service() {
             if (savedKey.isNotBlank() && groqApiKey.isBlank()) {
                 groqApiKey = savedKey
             }
+            groqApiKey2 = prefs.getString("groq_api_key_2", "") ?: ""
+            openaiApiKey = prefs.getString("openai_api_key", "") ?: ""
         } catch (_: Exception) {}
         mainHandler.postDelayed({
             if (isServiceRunning) {
@@ -216,7 +220,86 @@ class FridayForegroundService : Service() {
         return null
     }
 
+    private var fallbackSpeechRecognizer: android.speech.SpeechRecognizer? = null
+
+    private fun isNetworkAvailable(): Boolean {
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+        val network = connectivityManager?.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    private fun startAndroidSpeechRecognizerFallback(language: String?) {
+        mainHandler.post {
+            wakeDetector?.stop()
+            stopActiveQueryListening()
+            isActiveQueryRecording = true
+
+            if (fallbackSpeechRecognizer == null) {
+                fallbackSpeechRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(this)
+                fallbackSpeechRecognizer?.setRecognitionListener(object : android.speech.RecognitionListener {
+                    override fun onReadyForSpeech(params: android.os.Bundle?) {
+                        sendEventToJS("onSpeechStart", null)
+                    }
+                    override fun onBeginningOfSpeech() {}
+                    override fun onRmsChanged(rmsdB: Float) {
+                        val normalizedLevel = ((rmsdB + 2.0f) / 12.0f).coerceIn(0.0f, 1.0f) * 10.0f
+                        sendEventToJS("onSpeechVolumeChanged", Arguments.createMap().apply {
+                            putDouble("value", normalizedLevel.toDouble())
+                        })
+                    }
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+                    override fun onEndOfSpeech() {}
+                    override fun onError(error: Int) {
+                        Log.e(TAG, "SpeechRecognizer fallback error: $error")
+                        isActiveQueryRecording = false
+                        sendEventToJS("onSpeechFinalResult", Arguments.createMap().apply {
+                            putString("transcript", "")
+                            putBoolean("isFinal", true)
+                        })
+                        resumeWakeDetector()
+                    }
+                    override fun onResults(results: android.os.Bundle?) {
+                        val matches = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                        val transcript = matches?.firstOrNull() ?: ""
+                        isActiveQueryRecording = false
+                        sendEventToJS("onSpeechFinalResult", Arguments.createMap().apply {
+                            putString("transcript", transcript)
+                            putBoolean("isFinal", true)
+                        })
+                        resumeWakeDetector()
+                    }
+                    override fun onPartialResults(partialResults: android.os.Bundle?) {}
+                    override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+                })
+            }
+
+            val intent = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                if (language != null) {
+                    putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, language)
+                }
+            }
+            try {
+                fallbackSpeechRecognizer?.startListening(intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start fallback SpeechRecognizer: ${e.message}")
+                isActiveQueryRecording = false
+                resumeWakeDetector()
+            }
+        }
+    }
+
     fun startActiveQueryListening(language: String? = null) {
+        val now = SystemClock.elapsedRealtime()
+        val hasCloudKey = groqApiKey.isNotBlank() || groqApiKey2.isNotBlank() || openaiApiKey.isNotBlank()
+        
+        if (now < rateLimitBackoffUntil || !hasCloudKey || !isNetworkAvailable()) {
+            Log.i(TAG, "Using Android SpeechRecognizer fallback (Rate limited, no keys, or offline)")
+            startAndroidSpeechRecognizerFallback(language)
+            return
+        }
+
         mainHandler.post {
             // Stop background wake detector so active mic capture has exclusive hardware access
             wakeDetector?.stop()
@@ -437,6 +520,9 @@ class FridayForegroundService : Service() {
 
     fun stopActiveQueryListening() {
         isActiveQueryRecording = false
+        try {
+            fallbackSpeechRecognizer?.cancel()
+        } catch (_: Exception) {}
         try { activeAgc?.release() } catch (_: Exception) {}
         try { activeAec?.release() } catch (_: Exception) {}
                     try { activeNs?.release() } catch (_: Exception) {}
@@ -560,65 +646,107 @@ class FridayForegroundService : Service() {
     // 3. GROQ WHISPER DIRECT PCM-TO-TEXT HTTP DISPATCH (with Fallback)
     // =========================================================================
 
+    private fun tryGroq(wavData: ByteArray, language: String?, key: String): String {
+        val models = arrayOf("whisper-large-v3-turbo", "whisper-large-v3")
+        for (model in models) {
+            try {
+                val requestBodyBuilder = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("model", model)
+                    .addFormDataPart("temperature", "0.0")
+                    .addFormDataPart("response_format", "json")
+                    .addFormDataPart("file", "speech.wav", wavData.toRequestBody("audio/wav".toMediaTypeOrNull()))
+
+                val langCode = if (!language.isNullOrBlank()) language.split("-", "_")[0].lowercase() else "en"
+                requestBodyBuilder.addFormDataPart("language", langCode)
+                requestBodyBuilder.addFormDataPart("prompt", "FRIDAY, Hey Friday, Boss, Tony Stark, YouTube, WhatsApp, Taarak Mehta, open, play, call, send, search, volume, battery, alarms, flashlight, Vega, Yes Boss, acknowledge, clear.")
+
+                val request = Request.Builder()
+                    .url("https://api.groq.com/openai/v1/audio/transcriptions")
+                    .addHeader("Authorization", "Bearer $key")
+                    .post(requestBodyBuilder.build())
+                    .build()
+
+                okHttpClient.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val respStr = response.body?.string() ?: "{}"
+                        return JSONObject(respStr).optString("text", "")
+                    } else {
+                        Log.w(TAG, "Groq Whisper error on model $model [${response.code}]")
+                        if (response.code == 429) {
+                            // Temporary backoff, might be overridden if another key succeeds
+                            rateLimitBackoffUntil = SystemClock.elapsedRealtime() + 45000L
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Groq Whisper request failed for model $model: ${e.message}")
+            }
+        }
+        return ""
+    }
+
+    private fun tryOpenAI(wavData: ByteArray, language: String?, key: String): String {
+        try {
+            val requestBodyBuilder = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("model", "whisper-1")
+                .addFormDataPart("temperature", "0.0")
+                .addFormDataPart("response_format", "json")
+                .addFormDataPart("file", "speech.wav", wavData.toRequestBody("audio/wav".toMediaTypeOrNull()))
+
+            val langCode = if (!language.isNullOrBlank()) language.split("-", "_")[0].lowercase() else "en"
+            requestBodyBuilder.addFormDataPart("language", langCode)
+
+            val request = Request.Builder()
+                .url("https://api.openai.com/v1/audio/transcriptions")
+                .addHeader("Authorization", "Bearer $key")
+                .post(requestBodyBuilder.build())
+                .build()
+
+            okHttpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val respStr = response.body?.string() ?: "{}"
+                    return JSONObject(respStr).optString("text", "")
+                } else {
+                    Log.w(TAG, "OpenAI Whisper error [${response.code}]")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "OpenAI Whisper request failed: ${e.message}")
+        }
+        return ""
+    }
+
     private fun transcribeWithGroqWhisper(
         wavData: ByteArray,
         language: String? = null,
         onResult: (String) -> Unit
     ) {
         httpExecutor.execute {
-            val key = groqApiKey.trim()
-            if (key.isBlank()) {
-                Log.w(TAG, "Groq API key not set — cannot dispatch Whisper transcription")
-                return@execute
-            }
-            val models = arrayOf("whisper-large-v3-turbo", "whisper-large-v3")
             var transcript = ""
+            val keysToTry = mutableListOf<Pair<String, String>>()
+            if (groqApiKey.isNotBlank()) keysToTry.add(Pair("groq", groqApiKey.trim()))
+            if (groqApiKey2.isNotBlank()) keysToTry.add(Pair("groq", groqApiKey2.trim()))
+            if (openaiApiKey.isNotBlank()) keysToTry.add(Pair("openai", openaiApiKey.trim()))
 
-            for (model in models) {
-                try {
-                    val requestBodyBuilder = MultipartBody.Builder()
-                        .setType(MultipartBody.FORM)
-                        .addFormDataPart("model", model)
-                        .addFormDataPart("temperature", "0.0")
-                        .addFormDataPart("response_format", "json")
-                        .addFormDataPart(
-                            "file",
-                            "speech.wav",
-                            wavData.toRequestBody("audio/wav".toMediaTypeOrNull())
-                        )
-
-                    val langCode = if (!language.isNullOrBlank()) language.split("-", "_")[0].lowercase() else "en"
-                    requestBodyBuilder.addFormDataPart("language", langCode)
-                    requestBodyBuilder.addFormDataPart("prompt", "FRIDAY, Hey Friday, Boss, Tony Stark, YouTube, WhatsApp, Taarak Mehta, open, play, call, send, search, volume, battery, alarms, flashlight, Vega, Yes Boss, acknowledge, clear.")
-
-                    val request = Request.Builder()
-                        .url("https://api.groq.com/openai/v1/audio/transcriptions")
-                        .addHeader("Authorization", "Bearer $key")
-                        .post(requestBodyBuilder.build())
-                        .build()
-
-                    okHttpClient.newCall(request).execute().use { response ->
-                        if (response.isSuccessful) {
-                            val respStr = response.body?.string() ?: "{}"
-                            val json = JSONObject(respStr)
-                            transcript = json.optString("text", "")
-                            Log.i(TAG, "Groq Whisper success with model $model: '$transcript'")
-                            return@use
-                        } else {
-                            val errStr = response.body?.string() ?: ""
-                            Log.w(TAG, "Groq Whisper error on model $model [${response.code}]: $errStr")
-                            if (response.code == 429) {
-                                rateLimitBackoffUntil = SystemClock.elapsedRealtime() + 45000L
-                            }
-                        }
-                    }
-
-                    if (transcript.isNotBlank()) {
-                        break
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Groq Whisper request failed for model $model: ${e.message}")
+            for ((type, key) in keysToTry) {
+                transcript = if (type == "groq") {
+                    tryGroq(wavData, language, key)
+                } else {
+                    tryOpenAI(wavData, language, key)
                 }
+                
+                if (transcript.isNotBlank()) {
+                    // Success, clear backoff
+                    rateLimitBackoffUntil = 0L
+                    break
+                }
+            }
+
+            if (transcript.isBlank() && keysToTry.isNotEmpty()) {
+                Log.w(TAG, "All STT APIs failed or rate-limited. Setting backoff for fallback.")
+                rateLimitBackoffUntil = SystemClock.elapsedRealtime() + 60000L
             }
 
             mainHandler.post { onResult(transcript) }

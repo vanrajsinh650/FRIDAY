@@ -159,11 +159,11 @@ class WakeWordDetector(
 
         // Envelope Score
         val syllableScore = when {
-            peakCount in 2..4 && modulationDepth >= 1.5f -> 1.0f
-            peakCount in 1..5 && modulationDepth >= 1.0f -> 0.85f
+            peakCount in 2..4 && modulationDepth >= 1.8f -> 1.0f
+            peakCount in 1..5 && modulationDepth >= 1.2f -> 0.85f
             isWhisperDominant && peakCount >= 1 -> 0.90f
-            peakCount in 1..5 -> 0.70f
-            else -> 0.35f
+            peakCount in 1..5 -> 0.60f // Reduced to reject flat TV noise
+            else -> 0.20f
         }
 
         // 3. Fricative / High-Frequency Phonetic Score (/f/ in "Friday", /h/ in "Hey", /s/ in "Suno")
@@ -174,8 +174,17 @@ class WakeWordDetector(
             else -> 0.45f
         }
 
+        // Fast noise check for silence and TV noise
+        if (maxRms < -60f && !isWhisperDominant) { // Too quiet, likely silence
+            return PatternResult(false, 0f)
+        }
+
         // 4. SNR Strength Score
         val avgSnr = sumSnr / frames.size
+        if (avgSnr < 1.5f && !isWhisperDominant) { // Background noise / TV
+            return PatternResult(false, 0f)
+        }
+
         val snrScore = if (isWhisperDominant) {
             ((avgSnr - 1.0f) / 10.0f).coerceIn(0.4f, 1.0f)
         } else {

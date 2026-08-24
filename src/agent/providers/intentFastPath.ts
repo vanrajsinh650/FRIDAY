@@ -33,6 +33,9 @@ export function resolveIntent(lastUserMsg: string): ToolCallResult | null {
         if (appName === 'camera') {
           return { toolName: 'open_camera', parameters: {} };
         }
+        if (appName === 'youtube') {
+          return { toolName: 'launch_app', parameters: { packageNameOrName: 'com.google.android.youtube' } };
+        }
         return { toolName: 'launch_app', parameters: { packageNameOrName: appName } };
       }
     }
