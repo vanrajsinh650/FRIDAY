@@ -15,6 +15,7 @@ import { ScopedMemoryRetriever } from '../memory/retriever';
 import { PersonaManager } from '../memory/personaManager';
 import { ConversationManager } from './conversationManager';
 import { resolveIntent } from './providers/intentFastPath';
+import { VisionPerception } from './perception/visionPerception';
 
 export class FridayAgent {
   private loop: AgentLoop;
@@ -73,6 +74,26 @@ export class FridayAgent {
         useAgentStore.getState().setAgentState('SUCCESS');
         useAgentStore.getState().setLastResponse(spokenAnswer);
         await FloatingOverlayModule.updateOverlay('Verified ✓', 'SUCCESS');
+        TelemetryLogger.recordEvent('TASK_COMPLETED', {
+          goal: rawGoal,
+          durationMs: Date.now() - taskStartTime,
+        });
+        return spokenAnswer;
+      }
+
+      // 1.3 DIRECT SCREEN PERCEPTION QUERY ("What's on my screen?", "What is this?", "Summarize this page", "Who is this?")
+      if (this.isScreenPerceptionQuery(resolvedGoal) || this.isScreenPerceptionQuery(cleanGoal)) {
+        useAgentStore.getState().setAgentState('THINKING');
+        SessionManager.addTurn('user', rawGoal, undefined, { ...entities, correctedTranscript: semantic.correctedTranscript });
+
+        const spokenAnswer = await this.executeScreenPerceptionQuery(resolvedGoal);
+
+        SessionManager.addTurn('assistant', spokenAnswer, undefined);
+        ConversationManager.addTurn('user', rawGoal);
+        ConversationManager.addTurn('assistant', spokenAnswer);
+        useAgentStore.getState().setAgentState('SUCCESS');
+        useAgentStore.getState().setLastResponse(spokenAnswer);
+
         TelemetryLogger.recordEvent('TASK_COMPLETED', {
           goal: rawGoal,
           durationMs: Date.now() - taskStartTime,
@@ -192,6 +213,66 @@ export class FridayAgent {
       return formattedResponse;
     } catch (_err) {
       return "I'm having a little trouble pulling that up right now, Boss.";
+    }
+  }
+
+  private isScreenPerceptionQuery(goal: string): boolean {
+    const lower = (goal || '').toLowerCase().trim();
+    const screenPatterns = /\b(what('?s| is) on (my |the )?screen|what am i looking at|what is this|read (this|the screen|my screen)|summarize (this|the screen|the page)|explain what is on (my )?screen|who is this|who sent this|describe (my |the )?screen|what is currently open)\b/i;
+    return screenPatterns.test(lower);
+  }
+
+  private async executeScreenPerceptionQuery(query: string): Promise<string> {
+    try {
+      useAgentStore.getState().setAgentState('THINKING');
+      await FloatingOverlayModule.showOverlay('Inspecting screen...', 'THINKING');
+
+      const screenTree = await AccessibilityModule.inspectScreen();
+      const rawPkg = screenTree?.activePackage || 'System';
+      const cleanPkg = rawPkg.replace('com.google.android.', '').replace('com.', '').replace('org.', '');
+      const appName = cleanPkg.charAt(0).toUpperCase() + cleanPkg.slice(1);
+
+      // Extract prominent textual elements
+      const visibleTexts = (screenTree?.nodes || [])
+        .map((n) => (n.text || n.contentDescription || '').trim())
+        .filter((t) => t.length > 1 && !/^(back|home|recents|battery|wifi|clock)$/i.test(t))
+        .slice(0, 25)
+        .join(' | ');
+
+      let visionSummary = '';
+      if (VisionPerception.isTreeSparse(screenTree)) {
+        const visualAnalysis = await VisionPerception.analyzeScreen('Describe what is visible on this screen concisely.');
+        if (visualAnalysis?.description) {
+          visionSummary = visualAnalysis.description;
+        }
+      }
+
+      const screenSummary = [
+        `Active Foreground App: ${appName}`,
+        visibleTexts ? `Visible UI Elements: ${visibleTexts}` : '',
+        visionSummary ? `Visual Content: ${visionSummary}` : '',
+      ].filter(Boolean).join('\n');
+
+      const prompt: ModelMessage[] = [
+        {
+          role: 'system',
+          content: `${PersonaManager.getSystemPersonaPrompt()}\n\nYou are inspecting the user's active mobile screen in real-time.\n${screenSummary}`,
+        },
+        {
+          role: 'user',
+          content: `User query: "${query}". Describe what is currently on the screen concisely in 1-2 conversational sentences. Address the user as "Boss" naturally.`,
+        },
+      ];
+
+      const response = await this.provider.generateText(prompt);
+      const formatted = PersonaManager.formatSpokenResponse(
+        response?.trim() || `You are currently viewing ${appName}, Boss.`
+      );
+
+      await FloatingOverlayModule.updateOverlay('Screen Inspected ✓', 'SUCCESS');
+      return formatted;
+    } catch (_err) {
+      return "I'm looking at your screen, Boss, but couldn't parse the current view clearly.";
     }
   }
 }
