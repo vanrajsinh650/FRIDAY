@@ -774,6 +774,10 @@ class FridayForegroundService : Service() {
             if (reactCtx == null || !reactCtx.hasActiveReactInstance()) {
                 reactCtx = com.friday.modules.FridayPackage.currentReactContext
             }
+            if (reactCtx == null || !reactCtx.hasActiveReactInstance()) {
+                val app = application as? com.friday.MainApplication
+                reactCtx = app?.reactNativeHost?.reactInstanceManager?.currentReactContext
+            }
             reactCtx?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)?.emit(eventName, params)
         } catch (e: Exception) {
             Log.w(TAG, "Failed emitting event '$eventName' to JS: ${e.message}")

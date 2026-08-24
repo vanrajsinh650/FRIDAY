@@ -77,6 +77,17 @@ class MainActivity : ReactActivity() {
         flushPendingVoiceIntent()
     }
 
+    override fun onPause() {
+        super.onPause()
+        // Critical for 24/7 background screen watching & assistant operation:
+        // When user is in another app (like YouTube or WhatsApp), keep React Native's JS runtime alive so Friday can observe the screen, speak TTS, and execute multi-turn commands!
+        if (FridayForegroundService.instance != null) {
+            try {
+                reactNativeHost.reactInstanceManager.onHostResume(this, null)
+            } catch (_: Exception) {}
+        }
+    }
+
     private fun handleVoiceIntent(intent: Intent?) {
         if (intent == null) return
         var triggerVoice = intent.getBooleanExtra("TRIGGER_VOICE_SESSION", false)
