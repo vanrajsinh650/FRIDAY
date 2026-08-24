@@ -60,7 +60,7 @@ export class VoicePipeline {
         const now = Date.now();
 
         // Strict Safety Gate: Verify that the transcribed audio actually addressed "Friday"
-        const wakeWordRegex = /\b(?:hey|hi|ok|okay|hello|yo|aye|suno|arre|dear)?\s*(?:friday|fri\s*day|fried\s*day|fry\s*day|freeday|frida|fridays|friday's|vega|veega|vaga)\b/i;
+        const wakeWordRegex = /\b(?:hey|hi|ok|okay|hello|yo|aye|suno|arre|dear)?\s*(?:friday|fri\s*day|fried\s*day|fry\s*day|freeday|frida|fridays|friday's|fraiday|phriday|f\.r\.i\.d\.a\.y|vega|veega|vaga)\b/i;
         if (!wakeWordRegex.test(fullText) && !wakeWordRegex.test(validCmd)) {
           return;
         }
@@ -205,7 +205,7 @@ export class VoicePipeline {
         }
 
         // Clean any optional leading "Friday" prefix
-        const wakeWordPrefixRegex = /^(?:(?:hey|hi|ok|okay|hello|yo|aye|suno|arre|dear)\s+)?(?:friday|fri\s*day|fried\s*day|fry\s*day|freeday|frida|fridays|friday's|vega|veega|vaga)[\s,:]*/i;
+        const wakeWordPrefixRegex = /^(?:(?:hey|hi|ok|okay|hello|yo|aye|suno|arre|dear)\s+)?(?:friday|fri\s*day|fried\s*day|fry\s*day|freeday|frida|fridays|friday's|fraiday|phriday|f\.r\.i\.d\.a\.y|vega|veega|vaga)[\s,:]*/i;
         queryToExecute = capturedText.replace(wakeWordPrefixRegex, '').trim() || capturedText;
       }
 

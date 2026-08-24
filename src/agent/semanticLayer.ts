@@ -15,11 +15,18 @@ export interface SemanticResult {
 
 export class SemanticLayer {
   private static knownEntities: Map<string, string[]> = new Map([
+    ['Friday', ['fraiday', 'fry day', 'freeday', 'frida', 'fryday', 'phriday', 'f.r.i.d.a.y', 'vega', 'veega', 'vaga']],
     ['Arijit Singh', ['arijit sing', 'arijeet singh', 'arjit singh', 'arijit sin', 'arjeet singh']],
     ['Taarak Mehta Ka Ooltah Chashmah', ['tarak mehta', 'tarak maheta', 'taarak maheta', 'tarak mehta ka ulta chashma', 'taarak mehta ka oolta chasma']],
     ['Vanrajsinh', ['vanraj sinh', 'vanrajsingh', 'vanraj sin', 'vanraj']],
-    ['YouTube', ['you tube', 'utube', 'u tube']],
-    ['WhatsApp', ['whats app', 'watsapp', 'whatapp', 'what sapp']],
+    ['YouTube', ['you tube', 'utube', 'u tube', 'ytube', 'u-tube']],
+    ['WhatsApp', ['whats app', 'watsapp', 'whatapp', 'what sapp', 'wapp']],
+    ['Instagram', ['insta gram', 'insta']],
+    ['Chrome', ['google chrome', 'chrom']],
+    ['Spotify', ['spotyfy', 'spotifi']],
+    ['Camera', ['camra', 'photo camera']],
+    ['Gallery', ['photos app', 'galery', 'gallary']],
+    ['Settings', ['setting', 'setings', 'system settings']],
   ]);
 
   static process(rawTranscript: string, context: {

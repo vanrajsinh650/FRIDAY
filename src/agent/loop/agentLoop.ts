@@ -222,8 +222,10 @@ export class AgentLoop {
       } else if (task.goalType === 'MESSAGING') {
         finalSpokenResponse = 'Your message has been sent, Boss.';
       } else if (tool === 'launch_app') {
-        const app = lastAction.parameters?.packageNameOrName || 'app';
-        finalSpokenResponse = `Opened ${app}, Boss.`;
+        const rawApp = lastAction?.parameters?.packageNameOrName || lastAction?.parameters?.packageName || 'app';
+        const cleanApp = rawApp.replace('com.google.android.', '').replace('com.', '');
+        const formattedApp = cleanApp.charAt(0).toUpperCase() + cleanApp.slice(1);
+        finalSpokenResponse = `Opened ${formattedApp} for you, Boss.`;
       } else {
         finalSpokenResponse = 'Task completed, Boss.';
       }

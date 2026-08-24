@@ -507,7 +507,7 @@ class FridayForegroundService : Service() {
 
     private fun containsWakeWord(text: String): Boolean {
         val pattern = Pattern.compile(
-            """\b(?:hey|hi|ok|okay|hello|yo|aye|suno|arre|dear)?\s*(?:friday|fri\s*day|fried\s*day|fry\s*day|freeday|frida|fridays|friday's|vega|veega|vaga)\b""",
+            """\b(?:hey|hi|ok|okay|hello|yo|aye|suno|arre|dear)?\s*(?:friday|fri\s*day|fried\s*day|fry\s*day|freeday|frida|fridays|friday's|fraiday|phriday|f\.r\.i\.d\.a\.y|vega|veega|vaga)\b""",
             Pattern.CASE_INSENSITIVE
         )
         return pattern.matcher(text).find()
@@ -570,7 +570,7 @@ class FridayForegroundService : Service() {
 
     private fun extractTrailingCommand(text: String): String {
         val pattern = Pattern.compile(
-            """^(?:\b(?:hey|hi|ok|okay|hello|yo|aye|suno|arre|dear)?\s*(?:friday|fri\s*day|fried\s*day|fry\s*day|freeday|frida|fridays|friday's|vega|veega|vaga)\b[\s,:;!?-]*)(.*)$""",
+            """^(?:\b(?:hey|hi|ok|okay|hello|yo|aye|suno|arre|dear)?\s*(?:friday|fri\s*day|fried\s*day|fry\s*day|freeday|frida|fridays|friday's|fraiday|phriday|f\.r\.i\.d\.a\.y|vega|veega|vaga)\b[\s,:;!?-]*)(.*)$""",
             Pattern.CASE_INSENSITIVE
         )
         val matcher = pattern.matcher(text)
