@@ -6,7 +6,7 @@ import kotlin.math.max
 import kotlin.math.min
 
 class WakeWordDetector(
-    private var sensitivity: Float = 0.70f,
+    private var sensitivity: Float = 0.82f,
     private val onWakeDetected: (confidence: Float, latencyMs: Long, preRollAudio: ShortArray?) -> Unit,
     private val onTelemetryUpdate: (rmsDb: Float, noiseFloorDb: Float, isVoice: Boolean, wakeConfidence: Float) -> Unit
 ) {
@@ -198,8 +198,8 @@ class WakeWordDetector(
             0.15f * snrScore
         ).coerceIn(0.0f, 0.99f)
 
-        // Dynamic threshold mapped from sensitivity (sensitivity 0.65 -> threshold ~0.56)
-        val wakeThreshold = (1.0f - sensitivity) * 0.40f + 0.42f
+        // Dynamic threshold mapped from sensitivity (sensitivity 0.82 -> threshold ~0.38)
+        val wakeThreshold = ((1.0f - sensitivity) * 0.35f + 0.32f).coerceIn(0.28f, 0.70f)
 
         val isWake = compositeConfidence >= wakeThreshold
 
