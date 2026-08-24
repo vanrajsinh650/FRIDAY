@@ -6,7 +6,7 @@ import kotlin.math.max
 import kotlin.math.min
 
 class WakeWordDetector(
-    private var sensitivity: Float = 0.82f,
+    private var sensitivity: Float = 0.65f,
     private val onWakeDetected: (confidence: Float, latencyMs: Long, preRollAudio: ShortArray?) -> Unit,
     private val onTelemetryUpdate: (rmsDb: Float, noiseFloorDb: Float, isVoice: Boolean, wakeConfidence: Float) -> Unit
 ) {
@@ -14,7 +14,7 @@ class WakeWordDetector(
     private val preprocessor = FarFieldAudioPreprocessor()
     private var isRunning = false
     private var lastWakeTimestamp = 0L
-    private val cooldownMs = 800L
+    private val cooldownMs = 1200L
 
     // Rolling frame buffer for speech segment analysis (up to ~2.5 seconds)
     private val speechFrameBuffer = ArrayList<FarFieldAudioPreprocessor.AudioFrameFeatures>(80)
@@ -103,26 +103,25 @@ class WakeWordDetector(
      * - "Hey Friday" (3 syllables: /heɪ/ - /fraɪ/ - /deɪ/, duration ~400ms - 1500ms)
      * - "Friday" (2 syllables: /fraɪ/ - /deɪ/, duration ~300ms - 1100ms)
      * - "Hi Friday", "Ok Friday", "Suno Friday" (3-4 syllables, duration ~450ms - 1700ms)
-     * Supports both Voiced speech and Whispered/Low-Volume speech.
      */
     private fun evaluateWakePattern(
         frames: List<FarFieldAudioPreprocessor.AudioFrameFeatures>,
         durationMs: Long
     ): PatternResult {
-        // Fast minimum frame check (minimum 8 frames = ~256ms)
-        if (frames.size < 8) {
+        // Minimum frame check (minimum 10 frames = ~320ms)
+        if (frames.size < 10) {
             return PatternResult(false, 0f)
         }
 
-        if (durationMs > 2400L) { // Continuous ambient conversation -> reject
+        if (durationMs > 2200L || durationMs < 280L) {
             return PatternResult(false, 0f)
         }
 
         // 1. Duration Score
         val durationScore = when {
             durationMs in 350..1500 -> 1.0f
-            durationMs in 280..2000 -> 0.80f
-            else -> 0.40f
+            durationMs in 280..1900 -> 0.80f
+            else -> 0.30f
         }
 
         // 2. Syllable Envelope Extraction
@@ -144,10 +143,10 @@ class WakeWordDetector(
             maxZcr = max(maxZcr, f.zcr)
             if (f.isWhisper) whisperFrameCount++
 
-            // Syllable Peak Detection with Whisper-Adaptive Prominence (>= 1.5 dB peak-valley difference)
+            // Syllable Peak Detection with Adaptive Prominence (>= 1.8 dB peak-valley difference)
             if (i in 1..(frames.size - 2)) {
                 val current = rmsValues[i]
-                val isPeak = current >= rmsValues[i - 1] && current >= rmsValues[i + 1] && f.snrDb >= 1.8f
+                val isPeak = current >= rmsValues[i - 1] && current >= rmsValues[i + 1] && f.snrDb >= 2.0f
                 if (isPeak) {
                     peakCount++
                 }
@@ -157,34 +156,38 @@ class WakeWordDetector(
         val modulationDepth = maxRms - minRms
         val isWhisperDominant = whisperFrameCount >= (frames.size / 3)
 
-        // Envelope Score
+        // Reject weak ambient hum or non-speech background
+        if (maxRms < -58.0f && !isWhisperDominant) {
+            return PatternResult(false, 0f)
+        }
+
+        val avgSnr = sumSnr / frames.size
+        if (avgSnr < 2.5f && !isWhisperDominant) {
+            return PatternResult(false, 0f)
+        }
+
+        // Syllable Envelope Score
         val syllableScore = when {
-            peakCount in 2..4 && modulationDepth >= 1.8f -> 1.0f
-            peakCount in 1..5 && modulationDepth >= 1.2f -> 0.85f
-            isWhisperDominant && peakCount >= 1 -> 0.90f
-            peakCount in 1..5 -> 0.60f // Reduced to reject flat TV noise
-            else -> 0.20f
+            peakCount in 2..4 && modulationDepth >= 2.0f -> 1.0f
+            peakCount in 1..5 && modulationDepth >= 1.5f -> 0.80f
+            isWhisperDominant && peakCount >= 1 -> 0.85f
+            peakCount in 1..5 -> 0.50f
+            else -> 0.15f
         }
 
         // 3. Fricative / High-Frequency Phonetic Score (/f/ in "Friday", /h/ in "Hey", /s/ in "Suno")
         val fricativeScore = when {
-            maxFricativeRatio >= 0.30f || maxZcr >= 0.18f -> 1.0f
-            maxFricativeRatio >= 0.20f || maxZcr >= 0.12f -> 0.80f
-            isWhisperDominant -> 0.85f
-            else -> 0.45f
+            maxFricativeRatio >= 0.25f || maxZcr >= 0.16f -> 1.0f
+            maxFricativeRatio >= 0.18f || maxZcr >= 0.10f -> 0.75f
+            isWhisperDominant -> 0.80f
+            else -> 0.35f
         }
 
-        // Fast noise check for silence and TV noise
-        // Removed maxRms strict filter
-
         // 4. SNR Strength Score
-        val avgSnr = sumSnr / frames.size
-        // Removed avgSnr strict filter
-
         val snrScore = if (isWhisperDominant) {
             ((avgSnr - 1.0f) / 10.0f).coerceIn(0.4f, 1.0f)
         } else {
-            ((avgSnr - 2.0f) / 12.0f).coerceIn(0.3f, 1.0f)
+            ((avgSnr - 2.5f) / 12.0f).coerceIn(0.3f, 1.0f)
         }
 
         // Weighted Composite Acoustic Confidence
@@ -195,10 +198,9 @@ class WakeWordDetector(
             0.15f * snrScore
         ).coerceIn(0.0f, 0.99f)
 
-        // Dynamic threshold mapped from sensitivity (sensitivity 0.82 -> threshold ~0.44)
-        val wakeThreshold = (1.0f - sensitivity) * 0.35f + 0.38f
+        // Dynamic threshold mapped from sensitivity (sensitivity 0.65 -> threshold ~0.56)
+        val wakeThreshold = (1.0f - sensitivity) * 0.40f + 0.42f
 
-        // Candidate trigger condition (Groq Whisper in RAM performs ground-truth verification)
         val isWake = compositeConfidence >= wakeThreshold
 
         return PatternResult(isWake, compositeConfidence)

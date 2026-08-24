@@ -112,7 +112,9 @@ class TTSTurboModule(private val reactContext: ReactApplicationContext) :
 
                 override fun onDone(utteranceId: String?) {
                     abandonAudioFocus()
-                    FridayForegroundService.isFridaySpeaking = false
+                    mainHandler.postDelayed({
+                        FridayForegroundService.isFridaySpeaking = false
+                    }, 350)
                     emitEvent("onTTSDone", Arguments.createMap().apply {
                         putString("utteranceId", utteranceId ?: "")
                     })
@@ -375,7 +377,9 @@ class TTSTurboModule(private val reactContext: ReactApplicationContext) :
                 }
                 setOnCompletionListener {
                     abandonAudioFocus()
-                    FridayForegroundService.isFridaySpeaking = false
+                    mainHandler.postDelayed({
+                        FridayForegroundService.isFridaySpeaking = false
+                    }, 350)
                     emitEvent("onTTSDone", Arguments.createMap().apply { putString("utteranceId", utteranceId) })
                     releasePlayer()
                 }

@@ -72,19 +72,19 @@ export class VoicePipeline {
 
         const evaluation = ActionSafetyGuard.evaluate(rawCmd);
 
-        // CASE 1: FLUID SINGLE-BREATH COMMAND or INCOMPLETE ACTION ("Friday, what is the battery level", "Friday, open")
+        // CASE 1: FLUID SINGLE-BREATH COMMAND or INCOMPLETE ACTION ("Friday, what is the battery level", "Friday, open YouTube")
         if (evaluation.type === 'ACTIONABLE' || evaluation.type === 'CONVERSATIONAL' || evaluation.type === 'INCOMPLETE_ACTION') {
           FloatingOverlayModule.showOverlay('Listening...', 'LISTENING');
-          await this.startContinuousVoiceSession(rawCmd);
+          await this.startVoiceSession(rawCmd);
         } else {
           // CASE 2: VERIFIED STANDALONE WAKE WORD ("Friday" / "Hey Friday" alone)
-          // Speaks "Yes, Boss?" greeting and opens active multi-turn window for command
+          // Speaks "Yes, Boss?" greeting and opens active window for command
           this.stateMachine.transition(VoiceSessionState.WAKE_DETECTED);
           FloatingOverlayModule.showOverlay('Listening...', 'LISTENING');
           const greeting = this.getRandomWakeAck();
           PocketTTSEngine.speak({ text: greeting }).catch(() => {});
           await new Promise(r => setTimeout(r, 200));
-          await this.startContinuousVoiceSession(); // Opens follow-up window
+          await this.startVoiceSession(); // Opens query window
         }
       }
     );
@@ -100,12 +100,12 @@ export class VoicePipeline {
           const evaluation = ActionSafetyGuard.evaluate(cmd);
           FloatingOverlayModule.showOverlay('Listening...', 'LISTENING');
           if (evaluation.type === 'ACTIONABLE' || evaluation.type === 'CONVERSATIONAL') {
-            await this.startContinuousVoiceSession(cmd);
+            await this.startVoiceSession(cmd);
           } else {
             this.stateMachine.transition(VoiceSessionState.WAKE_DETECTED);
             PocketTTSEngine.speak({ text: this.getRandomWakeAck() }).catch(() => {});
             await new Promise(r => setTimeout(r, 200));
-            await this.startContinuousVoiceSession();
+            await this.startVoiceSession();
           }
         }
       );
@@ -139,82 +139,22 @@ export class VoicePipeline {
   }
 
   /**
-   * Fluid Multi-Turn Continuous Voice Session.
+   * Bounded Voice Session.
    *
-   * Executes initial command, speaks response, and then maintains an Active Follow-Up Window (8–10s)
-   * where the user can ask follow-ups WITHOUT repeating "Friday" before every question.
+   * Executes initial command or waits for single turn command upon standalone wake,
+   * speaks response, and immediately returns to 24/7 background standby (WAKE_LISTENING).
    */
-  static async startContinuousVoiceSession(initialQuery?: string): Promise<void> {
+  static async startVoiceSession(initialQuery?: string): Promise<void> {
     if (this.isRunning) return;
     this.isRunning = true;
 
     const agent = new FridayAgent();
-    let nextQuery: string | null = initialQuery || null;
 
     try {
-      while (this.isRunning) {
-        if (nextQuery && nextQuery.trim()) {
-          const evalResult = ActionSafetyGuard.evaluate(nextQuery);
+      let queryToExecute = (initialQuery || '').trim();
 
-          if (evalResult.type === 'NOISE') {
-            nextQuery = null;
-            continue;
-          }
-
-          if (evalResult.type === 'STOP') {
-            useAgentStore.getState().setAgentState('SPEAKING');
-            this.stateMachine.transition(VoiceSessionState.SPEAKING);
-            FloatingOverlayModule.updateOverlay('Standing by, Boss.', 'IDLE');
-            await PocketTTSEngine.speak({ text: 'Standing by, Boss.' });
-            await PocketTTSEngine.waitForCompletion();
-            break;
-          }
-
-          if (evalResult.type === 'INCOMPLETE_ACTION') {
-            useAgentStore.getState().setAgentState('SPEAKING');
-            this.stateMachine.transition(VoiceSessionState.SPEAKING);
-            const prompt = evalResult.clarificationPrompt || "What's the play, Boss?";
-            FloatingOverlayModule.updateOverlay(prompt, 'LISTENING');
-            await PocketTTSEngine.speak({ text: prompt });
-            await PocketTTSEngine.waitForCompletion();
-            nextQuery = null;
-            continue;
-          }
-
-          VoiceTelemetry.startNewTurn();
-          useAgentStore.getState().setAgentState('THINKING');
-          this.stateMachine.transition(VoiceSessionState.THINKING);
-          FloatingOverlayModule.updateOverlay('Thinking...', 'THINKING');
-
-          const isAction = evalResult.type === 'ACTIONABLE';
-          if (isAction) {
-            const ack = VoicePipeline.quickAck();
-            useAgentStore.getState().setAgentState('SPEAKING');
-            PocketTTSEngine.speak({ text: ack });
-          }
-
-          const actionStartTime = Date.now();
-          const reply = await agent.executeGoal(nextQuery);
-          VoiceTelemetry.recordLatency('firstActionLatency', Date.now() - actionStartTime);
-
-          const shapedReply = ResponseShaper.shape(reply);
-
-          if (shapedReply && shapedReply.trim()) {
-            await PocketTTSEngine.waitForCompletion();
-            useAgentStore.getState().setAgentState('SPEAKING');
-            this.stateMachine.transition(VoiceSessionState.SPEAKING);
-            FloatingOverlayModule.updateOverlay('Speaking...', 'SPEAKING');
-            await PocketTTSEngine.speak({ text: shapedReply });
-            await PocketTTSEngine.waitForCompletion();
-          } else {
-            await PocketTTSEngine.waitForCompletion();
-          }
-
-          // Both device automation actions and conversational queries stay in Active Follow-Up Window
-          nextQuery = null;
-        }
-
-        // --- ACTIVE MULTI-TURN FOLLOW-UP WINDOW (No "Friday" Keyword Required) ---
+      // If standalone wake word ("Friday"), listen for the user's command
+      if (!queryToExecute) {
         AudioManager.duckMediaAudio(true);
         useAgentStore.getState().setAgentState('LISTENING');
         this.stateMachine.transition(VoiceSessionState.LISTENING);
@@ -222,7 +162,6 @@ export class VoicePipeline {
         AudioManager.startRecording();
 
         let sttResult = { transcript: '' };
-
         try {
           sttResult = await SpeechRecognizer.recognizeSpeech((interim) => {
             useVoiceStore.getState().setTranscriptStream(interim);
@@ -230,39 +169,106 @@ export class VoicePipeline {
           });
         } catch (_err: any) {
           await SpeechRecognizer.stopListening();
-          break;
         } finally {
           AudioManager.stopRecording();
           AudioManager.duckMediaAudio(false);
         }
 
-        if (!this.isRunning) break;
-
         const capturedText = (sttResult.transcript || '').trim();
-        const capturedEval = ActionSafetyGuard.evaluate(capturedText);
+        const evalResult = ActionSafetyGuard.evaluate(capturedText);
 
-        // If silence or empty after follow-up window, conclude session gracefully
-        if (capturedEval.type === 'NOISE' || !capturedText) {
-          break;
+        if (evalResult.type === 'NOISE' || !capturedText) {
+          // Ambient noise or silence -> silently finish
+          return;
         }
 
-        if (capturedEval.type === 'STOP') {
+        if (evalResult.type === 'STOP') {
           useAgentStore.getState().setAgentState('SPEAKING');
           this.stateMachine.transition(VoiceSessionState.SPEAKING);
           FloatingOverlayModule.updateOverlay('Standing by, Boss.', 'IDLE');
           await PocketTTSEngine.speak({ text: 'Standing by, Boss.' });
           await PocketTTSEngine.waitForCompletion();
-          break;
+          return;
         }
 
-        // Strip any optional "Friday" if user happened to say it again
-        let cleanFollowUp = capturedText;
-        const wakeWordPrefixRegex = /^(?:(?:hey|hi|ok|okay|hello|yo|aye|suno|arre|dear)\s+)?(?:friday|fri\s*day|fried\s*day|fry\s*day|freeday|frida|fridays|friday's|vega|veega|vaga)[\s,]+/i;
-        if (wakeWordPrefixRegex.test(cleanFollowUp)) {
-          cleanFollowUp = cleanFollowUp.replace(wakeWordPrefixRegex, '').trim();
+        // Clean any optional leading "Friday" prefix
+        const wakeWordPrefixRegex = /^(?:(?:hey|hi|ok|okay|hello|yo|aye|suno|arre|dear)\s+)?(?:friday|fri\s*day|fried\s*day|fry\s*day|freeday|frida|fridays|friday's|vega|veega|vaga)[\s,:]*/i;
+        queryToExecute = capturedText.replace(wakeWordPrefixRegex, '').trim() || capturedText;
+      }
+
+      if (!queryToExecute) return;
+
+      const evalResult = ActionSafetyGuard.evaluate(queryToExecute);
+      if (evalResult.type === 'NOISE') return;
+
+      if (evalResult.type === 'STOP') {
+        useAgentStore.getState().setAgentState('SPEAKING');
+        this.stateMachine.transition(VoiceSessionState.SPEAKING);
+        FloatingOverlayModule.updateOverlay('Standing by, Boss.', 'IDLE');
+        await PocketTTSEngine.speak({ text: 'Standing by, Boss.' });
+        await PocketTTSEngine.waitForCompletion();
+        return;
+      }
+
+      if (evalResult.type === 'INCOMPLETE_ACTION') {
+        useAgentStore.getState().setAgentState('SPEAKING');
+        this.stateMachine.transition(VoiceSessionState.SPEAKING);
+        const prompt = evalResult.clarificationPrompt || "What's the play, Boss?";
+        FloatingOverlayModule.updateOverlay(prompt, 'LISTENING');
+        await PocketTTSEngine.speak({ text: prompt });
+        await PocketTTSEngine.waitForCompletion();
+
+        // Listen for clarification turn
+        AudioManager.duckMediaAudio(true);
+        useAgentStore.getState().setAgentState('LISTENING');
+        this.stateMachine.transition(VoiceSessionState.LISTENING);
+        AudioManager.startRecording();
+
+        let clarStt = { transcript: '' };
+        try {
+          clarStt = await SpeechRecognizer.recognizeSpeech((interim) => {
+            useVoiceStore.getState().setTranscriptStream(interim);
+          });
+        } catch (_e) {}
+        finally {
+          AudioManager.stopRecording();
+          AudioManager.duckMediaAudio(false);
         }
 
-        nextQuery = cleanFollowUp || capturedText;
+        const clarText = (clarStt.transcript || '').trim();
+        if (!clarText || ActionSafetyGuard.isNoiseOrArtifact(clarText)) {
+          return;
+        }
+        queryToExecute = `${queryToExecute} ${clarText}`.trim();
+      }
+
+      // Execute goal
+      VoiceTelemetry.startNewTurn();
+      useAgentStore.getState().setAgentState('THINKING');
+      this.stateMachine.transition(VoiceSessionState.THINKING);
+      FloatingOverlayModule.updateOverlay('Thinking...', 'THINKING');
+
+      const isAction = evalResult.type === 'ACTIONABLE';
+      if (isAction) {
+        const ack = VoicePipeline.quickAck();
+        useAgentStore.getState().setAgentState('SPEAKING');
+        PocketTTSEngine.speak({ text: ack });
+      }
+
+      const actionStartTime = Date.now();
+      const reply = await agent.executeGoal(queryToExecute);
+      VoiceTelemetry.recordLatency('firstActionLatency', Date.now() - actionStartTime);
+
+      const shapedReply = ResponseShaper.shape(reply);
+      if (shapedReply && shapedReply.trim()) {
+        await PocketTTSEngine.waitForCompletion();
+        useAgentStore.getState().setAgentState('SPEAKING');
+        this.stateMachine.transition(VoiceSessionState.SPEAKING);
+        FloatingOverlayModule.updateOverlay('Speaking...', 'SPEAKING');
+        await PocketTTSEngine.speak({ text: shapedReply });
+        await PocketTTSEngine.waitForCompletion();
+      } else {
+        await PocketTTSEngine.waitForCompletion();
       }
     } catch (err: any) {
       const msg = err?.message || '';
@@ -283,6 +289,10 @@ export class VoicePipeline {
         FridaySpeechRecognizerNative?.startContinuousWakeListening?.();
       }, 400);
     }
+  }
+
+  static async startContinuousVoiceSession(initialQuery?: string): Promise<void> {
+    return this.startVoiceSession(initialQuery);
   }
 
   static async handleVoiceTurn(agentExecutor?: (goal: string) => Promise<string>): Promise<void> {

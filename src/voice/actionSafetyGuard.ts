@@ -12,7 +12,8 @@ export interface UtteranceEvaluation {
 export class ActionSafetyGuard {
   private static readonly NOISE_TOKENS = new Set([
     'uh', 'um', 'ah', 'er', 'hmm', 'ha', 'oh', 'a', 'an', 'the',
-    'so', 'to', 'shh', 'like', 'yeah', 'yup'
+    'so', 'to', 'shh', 'like', 'yeah', 'yup', 'okay', 'ok', 'yes', 'no',
+    'got it', 'sure', 'fine', 'right', 'well', 'hey', 'hi', 'hello'
   ]);
 
   private static readonly STOP_COMMANDS = new Set([
@@ -25,7 +26,7 @@ export class ActionSafetyGuard {
 
   private static readonly CONVERSATIONAL_KEYWORDS = new Set([
     'time', 'date', 'battery', 'who', 'what', 'how', 'why', 'when', 'where',
-    'help', 'hello', 'hi', 'hey', 'status', 'features', 'tell'
+    'help', 'status', 'features', 'tell'
   ]);
 
   private static readonly ISOLATED_APP_NOUNS: Record<string, string> = {

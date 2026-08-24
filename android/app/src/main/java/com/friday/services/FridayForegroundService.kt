@@ -590,12 +590,7 @@ class FridayForegroundService : Service() {
 
         val now = SystemClock.elapsedRealtime()
         if (now < rateLimitBackoffUntil) {
-            Log.d(TAG, "Rate limit backoff active, triggering fallback acoustic wake.")
-            sendEventToJS("onWakeWordDetected", Arguments.createMap().apply {
-                putString("wakeWord", "friday")
-                putString("command", "")
-                putString("fullText", "friday")
-            })
+            Log.d(TAG, "Rate limit backoff active, skipping background audio segment.")
             return
         }
 
@@ -610,20 +605,15 @@ class FridayForegroundService : Service() {
 
         // Transcribe voice segment with Groq Whisper
         transcribeWithGroqWhisper(wavBytes) { transcript ->
-            if (transcript == null) {
-                Log.w(TAG, "STT failed (rate limit/network). Falling back to acoustic wake detection.")
-                sendEventToJS("onWakeWordDetected", Arguments.createMap().apply {
-                    putString("wakeWord", "friday")
-                    putString("command", "")
-                    putString("fullText", "friday")
-                })
+            if (transcript.isNullOrBlank()) {
+                Log.d(TAG, "STT returned empty/null. Silently ignoring candidate audio.")
                 return@transcribeWithGroqWhisper
             }
 
             val clean = transcript.trim()
 
             // CRITICAL: Strict verification gate — if transcription does NOT contain "Friday", silently discard!
-            if (clean.isBlank() || !containsWakeWord(clean)) {
+            if (!containsWakeWord(clean)) {
                 Log.d(TAG, "Audio segment transcribed as '$clean' - does not contain wake word 'Friday'. Ignored silently.")
                 return@transcribeWithGroqWhisper
             }
@@ -631,14 +621,16 @@ class FridayForegroundService : Service() {
             val trailingCommand = extractTrailingCommand(clean)
 
             if (trailingCommand.isNotBlank()) {
-                // CASE 1: Single-Breath Command ("Friday, what is the weather today?")
+                // CASE 1: Single-Breath Command ("Friday, open YouTube")
+                Log.i(TAG, "Verified Single-Breath Command: '$clean' -> command: '$trailingCommand'")
                 sendEventToJS("onWakeWordDetected", Arguments.createMap().apply {
                     putString("wakeWord", "friday")
                     putString("command", trailingCommand)
                     putString("fullText", clean)
                 })
             } else {
-                // CASE 2: Verified Standalone Wake ("Friday" / "Hey Friday" alone) -> Speaks greeting -> Opens active query window
+                // CASE 2: Verified Standalone Wake ("Friday" / "Hey Friday" alone)
+                Log.i(TAG, "Verified Standalone Wake Word: '$clean'")
                 sendEventToJS("onWakeWordDetected", Arguments.createMap().apply {
                     putString("wakeWord", "friday")
                     putString("command", "")
