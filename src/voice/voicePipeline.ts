@@ -88,9 +88,13 @@ export class VoicePipeline {
           this.stateMachine.transition(VoiceSessionState.WAKE_DETECTED);
           FloatingOverlayModule.showOverlay('Listening...', 'LISTENING');
           const greeting = this.getRandomWakeAck();
-          PocketTTSEngine.speak({ text: greeting }).catch(() => {});
-          await new Promise(r => setTimeout(r, 200));
-          await this.startVoiceSession(); // Opens query window
+          
+          // Await snappy greeting (+25% speed) so the mic opens the EXACT millisecond she finishes speaking
+          try {
+            await PocketTTSEngine.speak({ text: greeting, speed: 1.25 });
+          } catch (_e) {}
+          
+          await this.startVoiceSession(); // Opens query window at the exact moment she finishes speaking
         }
       }
     );
@@ -109,8 +113,9 @@ export class VoicePipeline {
             await this.startVoiceSession(cmd);
           } else {
             this.stateMachine.transition(VoiceSessionState.WAKE_DETECTED);
-            PocketTTSEngine.speak({ text: this.getRandomWakeAck() }).catch(() => {});
-            await new Promise(r => setTimeout(r, 200));
+            try {
+              await PocketTTSEngine.speak({ text: this.getRandomWakeAck(), speed: 1.25 });
+            } catch (_e) {}
             await this.startVoiceSession();
           }
         }

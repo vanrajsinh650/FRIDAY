@@ -242,6 +242,7 @@ class FridayForegroundService : Service() {
             stopActiveQueryListening()
 
             isActiveQueryRecording = true
+            isFridaySpeaking = false
             activePcmBuffer.reset()
 
             activeQueryThread = Thread({
@@ -409,8 +410,8 @@ class FridayForegroundService : Service() {
                         activePcmBuffer.write(byteBuffer, 0, readShorts * 2)
                     }
 
-                    // 4. Dynamic SNR-adaptive silence endpointing (clean speech endpoints in ~450ms / 14 frames)
-                    val dynamicSilenceThreshold = if (snr > 8.0f) 14 else if (snr > 4.0f) 20 else 40
+                    // 4. Dynamic SNR-adaptive silence endpointing (natural speech endpoints in ~1000-1200ms)
+                    val dynamicSilenceThreshold = if (snr > 8.0f) 30 else if (snr > 4.0f) 35 else 40
                     if (hasDetectedSpeech && consecutiveSilenceFrames >= dynamicSilenceThreshold) {
                         break
                     }
@@ -421,10 +422,10 @@ class FridayForegroundService : Service() {
 
                 try { activeAgc?.release() } catch (_: Exception) {}
                 try { activeAec?.release() } catch (_: Exception) {}
-                    try { activeNs?.release() } catch (_: Exception) {}
+                try { activeNs?.release() } catch (_: Exception) {}
                 activeAgc = null
                 activeAec = null
-                    activeNs = null
+                activeNs = null
                 try {
                     record.stop()
                     record.release()
@@ -433,7 +434,7 @@ class FridayForegroundService : Service() {
 
                 // If speech was recorded, transcribe via Groq Whisper in RAM
                 val pcmData = synchronized(activePcmBuffer) { activePcmBuffer.toByteArray() }
-                if (pcmData.size > 16000) { // At least 0.5s audio
+                if (pcmData.size > 4800) { // At least 0.15s audio
                     val wavData = createWavFromPcm(pcmData)
                     transcribeWithGroqWhisper(wavData, language) { transcript ->
                         val clean = transcript?.trim() ?: ""

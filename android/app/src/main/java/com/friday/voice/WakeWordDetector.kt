@@ -56,8 +56,8 @@ class WakeWordDetector(
 
                 val segmentDuration = now - segmentStartTimestamp
 
-                // Allow speech segment to develop (cap continuous stream at 1800ms)
-                if (segmentDuration >= 1800L) {
+                // Allow speech segment to develop (cap continuous stream at 1100ms for lightning-fast awaken speed)
+                if (segmentDuration >= 1100L) {
                     val analysis = evaluateWakePattern(speechFrameBuffer, segmentDuration)
                     currentConfidence = analysis.confidence
 
