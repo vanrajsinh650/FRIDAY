@@ -48,9 +48,12 @@ export class ProviderRouter implements ModelProvider {
 
   async generateToolCall(messages: ModelMessage[], tools: any[]): Promise<ToolCallResult> {
     // Tier 0 — local deterministic intents.
-    const lastUserMsg = extractText(messages.find((m) => m.role === 'user')?.content)
+    let lastUserMsg = extractText(messages.find((m) => m.role === 'user')?.content)
       .toLowerCase()
       .trim();
+    if (lastUserMsg.includes('[screen vision]')) {
+      lastUserMsg = lastUserMsg.split('[screen vision]')[0].trim();
+    }
     const fast = resolveIntent(lastUserMsg);
     if (fast) return fast;
 

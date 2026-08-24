@@ -1,18 +1,21 @@
 import { ModelProvider } from './types';
 import { GroqProvider } from './groqProvider';
 import { NvidiaProvider } from './nvidiaProvider';
+import { NvidiaVisionProvider } from './nvidiaVisionProvider';
 import { OpenAIProvider } from './openaiProvider';
 import { LocalProvider } from './localProvider';
 import { ProviderRouter } from './providerRouter';
 import { useSettingsStore } from '../../state/settingsStore';
 
-export type ProviderName = 'groq' | 'nvidia' | 'openai' | 'local';
+export type ProviderName = 'groq' | 'nvidia' | 'nvidia-vision' | 'openai' | 'local';
 
 export class ProviderFactory {
   static create(name: ProviderName): ModelProvider {
     switch (name) {
       case 'nvidia':
         return new NvidiaProvider();
+      case 'nvidia-vision':
+        return new NvidiaVisionProvider();
       case 'openai':
         return new OpenAIProvider();
       case 'local':

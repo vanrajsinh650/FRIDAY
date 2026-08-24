@@ -65,7 +65,12 @@ class TaskManagerClass {
       lower.includes('hotspot') ||
       lower.includes('date') ||
       lower.includes('mute') ||
-      lower.includes('sound')
+      lower.includes('sound') ||
+      lower.includes('root') ||
+      lower.includes('shizuku') ||
+      lower.includes('elevated') ||
+      lower.includes('force stop') ||
+      lower.includes('kill')
     ) {
       goalType = 'SYSTEM_CONTROL';
       terminalConditions.push({

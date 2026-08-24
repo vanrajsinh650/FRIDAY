@@ -17,6 +17,8 @@ export class ToolVisibility {
         'inspect_screen',
         'scroll_page',
         'press_back',
+        'capture_screen_vision',
+        'visual_tap',
       ];
       return allSchemas.filter((s) => allowed.includes(s.function.name));
     }
@@ -31,6 +33,8 @@ export class ToolVisibility {
         'inspect_screen',
         'scroll_page',
         'press_back',
+        'capture_screen_vision',
+        'visual_tap',
       ];
       return allSchemas.filter((s) => allowed.includes(s.function.name));
     }
@@ -49,6 +53,18 @@ export class ToolVisibility {
         'close_background_apps',
         'close_app',
         'close_current_app',
+        'kill_app_silent',
+        'check_elevated_status',
+        'elevated_tap',
+        'elevated_text',
+        'elevated_key',
+        'schedule_alarm',
+        'schedule_routine',
+        'cancel_scheduled_task',
+        'list_scheduled_tasks',
+        'run_proactive_routine',
+        'capture_screen_vision',
+        'visual_tap',
       ];
       return allSchemas.filter((s) => allowed.includes(s.function.name));
     }

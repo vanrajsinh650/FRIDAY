@@ -20,7 +20,10 @@ class FridayPackage : ReactPackage {
             SystemControlTurboModule(reactContext),
             SystemCapabilityTurboModule(reactContext),
             SpeechRecognizerTurboModule(reactContext),
-            TTSTurboModule(reactContext)
+            TTSTurboModule(reactContext),
+            FloatingOverlayTurboModule(reactContext),
+            RootControlTurboModule(reactContext),
+            SchedulerTurboModule(reactContext)
         )
     }
 

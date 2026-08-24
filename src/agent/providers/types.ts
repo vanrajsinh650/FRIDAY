@@ -70,6 +70,11 @@ export function hasImageContent(messages: ModelMessage[]): boolean {
 
 // Wrap a base64 JPEG (as returned by AccessibilityService.takeScreenshot) in a
 // data URL. Passing an already-formed data URL through is a no-op.
-export function toImageDataUrl(base64Jpeg: string): string {
-  return base64Jpeg.startsWith('data:') ? base64Jpeg : `data:image/jpeg;base64,${base64Jpeg}`;
+export function toImageDataUrl(base64Jpeg: string, mimeType: string = 'image/jpeg'): string {
+  const trimmed = (base64Jpeg || '').trim();
+  if (trimmed.startsWith('data:')) {
+    return trimmed;
+  }
+  const clean = trimmed.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '').trim();
+  return `data:${mimeType};base64,${clean}`;
 }

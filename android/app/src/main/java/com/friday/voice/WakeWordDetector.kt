@@ -6,7 +6,7 @@ import kotlin.math.max
 import kotlin.math.min
 
 class WakeWordDetector(
-    private var sensitivity: Float = 0.72f,
+    private var sensitivity: Float = 0.82f,
     private val onWakeDetected: (confidence: Float, latencyMs: Long, preRollAudio: ShortArray?) -> Unit,
     private val onTelemetryUpdate: (rmsDb: Float, noiseFloorDb: Float, isVoice: Boolean, wakeConfidence: Float) -> Unit
 ) {
@@ -14,7 +14,7 @@ class WakeWordDetector(
     private val preprocessor = FarFieldAudioPreprocessor()
     private var isRunning = false
     private var lastWakeTimestamp = 0L
-    private val cooldownMs = 1200L
+    private val cooldownMs = 800L
 
     // Rolling frame buffer for speech segment analysis (up to ~2.5 seconds)
     private val speechFrameBuffer = ArrayList<FarFieldAudioPreprocessor.AudioFrameFeatures>(80)
@@ -190,13 +190,13 @@ class WakeWordDetector(
             0.15f * snrScore
         ).coerceIn(0.0f, 0.99f)
 
-        // Dynamic threshold mapped from sensitivity (sensitivity 0.72 -> threshold ~0.47)
+        // Dynamic threshold mapped from sensitivity (sensitivity 0.82 -> threshold ~0.44)
         val wakeThreshold = (1.0f - sensitivity) * 0.35f + 0.38f
 
-        // High-sensitivity trigger condition
+        // High-sensitivity trigger condition (Groq Whisper in RAM performs ground-truth verification)
         val isWake = compositeConfidence >= wakeThreshold &&
                      (peakCount in 1..5 || isWhisperDominant) &&
-                     fricativeScore >= 0.60f
+                     fricativeScore >= 0.40f
 
         return PatternResult(isWake, compositeConfidence)
     }

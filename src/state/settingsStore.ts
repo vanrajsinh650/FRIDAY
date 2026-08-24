@@ -6,7 +6,7 @@ export interface SettingsStore {
   nvidiaApiKey: string;
   openaiApiKey: string;
   vpsServerUrl: string;
-  defaultModelProvider: 'groq' | 'nvidia' | 'openai' | 'local';
+  defaultModelProvider: 'groq' | 'nvidia' | 'nvidia-vision' | 'openai' | 'local';
   modelName: string;
   nvidiaModel: string;
   nvidiaVisionModel: string;

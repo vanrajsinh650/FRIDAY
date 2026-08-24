@@ -32,8 +32,8 @@ export class SemanticLayer {
     // Fuzzy match against known entities — only correct if high confidence
     for (const [canonical, variants] of this.knownEntities) {
       for (const variant of variants) {
-        const regex = new RegExp(variant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-        if (regex.test(corrected.toLowerCase())) {
+        const regex = new RegExp(`\\b${variant.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\b`, 'gi');
+        if (regex.test(corrected)) {
           corrected = corrected.replace(regex, canonical);
           corrections.push({
             original: variant,

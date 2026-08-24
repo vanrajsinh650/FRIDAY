@@ -5,6 +5,8 @@ import { SafetyGuard } from '../safetyGuard';
 import { SessionManager } from '../session/sessionManager';
 import { useAgentStore } from '../../state/agentStore';
 import { TelemetryLogger } from '../../utils/telemetry';
+import { RootControlModule } from '../../native/RootControlModule';
+import { ToolResult } from '../../tools/types';
 
 export class StepExecutor {
   private static getPolicy(toolName: string): ToolExecutionPolicy {
@@ -21,14 +23,54 @@ export class StepExecutor {
       'close_app',
       'close_current_app',
       'close_background_apps',
+      'elevated_tap',
+      'elevated_text',
+      'elevated_key',
+      'kill_app_silent',
+      'visual_tap',
     ].includes(toolName);
 
     return {
       parallelSafe: !isUIMutating,
       mutatesUI: isUIMutating,
-      requiresForegroundApp: isUIMutating,
+      requiresForegroundApp: isUIMutating && toolName !== 'kill_app_silent',
       requiresConfirmation: ['factory_reset', 'format_disk', 'delete_all_contacts'].includes(toolName),
     };
+  }
+
+  private static async attemptElevatedFallback(action: PlannedAction): Promise<ToolResult | null> {
+    try {
+      const status = await RootControlModule.getElevatedStatus();
+      if (!status.elevatedAvailable) {
+        return null;
+      }
+
+      if (action.toolName === 'close_app' && action.parameters?.packageName) {
+        return await ToolRegistry.executeTool('kill_app_silent', { packageName: action.parameters.packageName });
+      }
+      if (action.toolName === 'type_text' && action.parameters?.text) {
+        return await ToolRegistry.executeTool('elevated_text', { text: action.parameters.text });
+      }
+      if (action.toolName === 'press_back') {
+        return await ToolRegistry.executeTool('elevated_key', { keyCode: 4 });
+      }
+      if (action.toolName === 'press_home') {
+        return await ToolRegistry.executeTool('elevated_key', { keyCode: 3 });
+      }
+      if (action.toolName === 'press_enter') {
+        return await ToolRegistry.executeTool('elevated_key', { keyCode: 66 });
+      }
+      if (
+        action.toolName === 'click_node' &&
+        action.parameters?.x !== undefined &&
+        action.parameters?.y !== undefined
+      ) {
+        return await ToolRegistry.executeTool('elevated_tap', { x: action.parameters.x, y: action.parameters.y });
+      }
+    } catch (_e) {
+      return null;
+    }
+    return null;
   }
 
   static async executeStep(action: PlannedAction): Promise<ActionRecord> {
@@ -61,7 +103,24 @@ export class StepExecutor {
     }
 
     const startTime = Date.now();
-    const result = await ToolRegistry.executeTool(action.toolName, action.parameters);
+    let result = await ToolRegistry.executeTool(action.toolName, action.parameters);
+
+    // If primary standard tool fails, attempt privileged / elevated fallback (ADR-014)
+    if (!result.success) {
+      const fallbackResult = await this.attemptElevatedFallback(action);
+      if (fallbackResult) {
+        if (fallbackResult.success) {
+          result = fallbackResult;
+        } else {
+          result = {
+            success: false,
+            error: `${result.error || 'Primary action failed'}. Elevated fallback failed: ${fallbackResult.error || 'Privilege execution failed'}`,
+            data: fallbackResult.data || result.data,
+          };
+        }
+      }
+    }
+
     const duration = Date.now() - startTime;
 
     if (result.success) {

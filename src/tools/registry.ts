@@ -48,7 +48,32 @@ import {
   showAlarmsTool,
   getInstalledAppsTool,
 } from './systemTools';
-import { saveMemoryFactTool, getMemoryFactsTool, forgetMemoryFactTool } from './memoryTools';
+import {
+  saveMemoryFactTool,
+  storeMemoryFactTool,
+  getMemoryFactsTool,
+  forgetMemoryFactTool,
+  setRelationshipTool,
+  getRelationshipGraphTool,
+  manageProfileTool,
+} from './memoryTools';
+import {
+  elevatedTapTool,
+  elevatedTextTool,
+  elevatedKeyTool,
+  killAppSilentTool,
+  checkElevatedStatusTool,
+  executeElevatedShellTool,
+  grantRuntimePermissionTool,
+} from './rootControlTools';
+import { captureScreenVisionTool, visualTapTool } from './visionTools';
+import {
+  scheduleAlarmTool,
+  scheduleRoutineTool,
+  cancelScheduledTaskTool,
+  listScheduledTasksTool,
+  runProactiveRoutineTool,
+} from './schedulerTools';
 
 export class ToolRegistry {
   private static tools: Map<string, ToolDefinition> = new Map();
@@ -99,8 +124,26 @@ export class ToolRegistry {
       showAlarmsTool,
       getInstalledAppsTool,
       saveMemoryFactTool,
+      storeMemoryFactTool,
       getMemoryFactsTool,
       forgetMemoryFactTool,
+      setRelationshipTool,
+      getRelationshipGraphTool,
+      manageProfileTool,
+      elevatedTapTool,
+      elevatedTextTool,
+      elevatedKeyTool,
+      killAppSilentTool,
+      checkElevatedStatusTool,
+      executeElevatedShellTool,
+      grantRuntimePermissionTool,
+      captureScreenVisionTool,
+      visualTapTool,
+      scheduleAlarmTool,
+      scheduleRoutineTool,
+      cancelScheduledTaskTool,
+      listScheduledTasksTool,
+      runProactiveRoutineTool,
     ];
     for (const tool of defaultTools) {
       this.tools.set(tool.name, tool);

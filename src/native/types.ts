@@ -63,9 +63,35 @@ export interface NotificationItem {
 
 export interface ScheduledTask {
   id: string;
-  taskType: 'ALARM' | 'REMINDER' | 'AUTONOMOUS_WORK';
+  taskType: 'ALARM' | 'REMINDER' | 'AUTONOMOUS_WORK' | 'ROUTINE';
   targetTimestamp: number;
   title: string;
   payloadJson?: string;
   recurringCron?: string;
+  isActive?: boolean;
+  createdAt?: number;
+  lastExecutedAt?: number;
 }
+
+export interface OverlayState {
+  statusText: string;
+  state: 'LISTENING' | 'THINKING' | 'PLANNING' | 'EXECUTING' | 'VERIFYING' | 'SUCCESS' | 'ERROR' | 'IDLE' | string;
+}
+
+export interface ElevatedStatus {
+  shizukuAvailable: boolean;
+  shizukuPermission: boolean;
+  rootAvailable: boolean;
+  elevatedAvailable: boolean;
+  activeTier: 'SHIZUKU' | 'ROOT' | 'NONE';
+}
+
+export interface ElevatedExecutionResult {
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  error?: string;
+}
+
+

@@ -9,6 +9,7 @@ import { useVoiceStore } from '../state/voiceStore';
 import { useAgentStore } from '../state/agentStore';
 import { FridayAgent } from '../agent/agent';
 import { SystemControlModule } from '../native/SystemControlModule';
+import { FloatingOverlayModule } from '../native/FloatingOverlayModule';
 import { ActionSafetyGuard } from './actionSafetyGuard';
 
 import { useSettingsStore } from '../state/settingsStore';
@@ -73,11 +74,13 @@ export class VoicePipeline {
 
         // CASE 1: FLUID SINGLE-BREATH COMMAND or INCOMPLETE ACTION ("Friday, what is the battery level", "Friday, open")
         if (evaluation.type === 'ACTIONABLE' || evaluation.type === 'CONVERSATIONAL' || evaluation.type === 'INCOMPLETE_ACTION') {
+          FloatingOverlayModule.showOverlay('Listening...', 'LISTENING');
           await this.startContinuousVoiceSession(rawCmd);
         } else {
           // CASE 2: VERIFIED STANDALONE WAKE WORD ("Friday" / "Hey Friday" alone)
           // Speaks "Yes, Boss?" greeting and opens active multi-turn window for command
           this.stateMachine.transition(VoiceSessionState.WAKE_DETECTED);
+          FloatingOverlayModule.showOverlay('Listening...', 'LISTENING');
           const greeting = this.getRandomWakeAck();
           await PocketTTSEngine.speak({ text: greeting });
           await PocketTTSEngine.waitForCompletion();
@@ -95,6 +98,7 @@ export class VoicePipeline {
           await SystemControlModule.pauseMediaPlayback();
           const cmd = (data?.command || '').trim();
           const evaluation = ActionSafetyGuard.evaluate(cmd);
+          FloatingOverlayModule.showOverlay('Listening...', 'LISTENING');
           if (evaluation.type === 'ACTIONABLE' || evaluation.type === 'CONVERSATIONAL') {
             await this.startContinuousVoiceSession(cmd);
           } else {
@@ -160,6 +164,7 @@ export class VoicePipeline {
           if (evalResult.type === 'STOP') {
             useAgentStore.getState().setAgentState('SPEAKING');
             this.stateMachine.transition(VoiceSessionState.SPEAKING);
+            FloatingOverlayModule.updateOverlay('Standing by, Boss.', 'IDLE');
             await PocketTTSEngine.speak({ text: 'Standing by, Boss.' });
             await PocketTTSEngine.waitForCompletion();
             break;
@@ -169,6 +174,7 @@ export class VoicePipeline {
             useAgentStore.getState().setAgentState('SPEAKING');
             this.stateMachine.transition(VoiceSessionState.SPEAKING);
             const prompt = evalResult.clarificationPrompt || "What's the play, Boss?";
+            FloatingOverlayModule.updateOverlay(prompt, 'LISTENING');
             await PocketTTSEngine.speak({ text: prompt });
             await PocketTTSEngine.waitForCompletion();
             nextQuery = null;
@@ -178,6 +184,7 @@ export class VoicePipeline {
           VoiceTelemetry.startNewTurn();
           useAgentStore.getState().setAgentState('THINKING');
           this.stateMachine.transition(VoiceSessionState.THINKING);
+          FloatingOverlayModule.updateOverlay('Thinking...', 'THINKING');
 
           const isAction = evalResult.type === 'ACTIONABLE';
           if (isAction) {
@@ -196,6 +203,7 @@ export class VoicePipeline {
             await PocketTTSEngine.waitForCompletion();
             useAgentStore.getState().setAgentState('SPEAKING');
             this.stateMachine.transition(VoiceSessionState.SPEAKING);
+            FloatingOverlayModule.updateOverlay('Speaking...', 'SPEAKING');
             await PocketTTSEngine.speak({ text: shapedReply });
             await PocketTTSEngine.waitForCompletion();
           } else {
@@ -215,6 +223,7 @@ export class VoicePipeline {
         AudioManager.duckMediaAudio(true);
         useAgentStore.getState().setAgentState('LISTENING');
         this.stateMachine.transition(VoiceSessionState.LISTENING);
+        FloatingOverlayModule.updateOverlay('Listening...', 'LISTENING');
         AudioManager.startRecording();
 
         let sttResult = { transcript: '' };
@@ -245,6 +254,7 @@ export class VoicePipeline {
         if (capturedEval.type === 'STOP') {
           useAgentStore.getState().setAgentState('SPEAKING');
           this.stateMachine.transition(VoiceSessionState.SPEAKING);
+          FloatingOverlayModule.updateOverlay('Standing by, Boss.', 'IDLE');
           await PocketTTSEngine.speak({ text: 'Standing by, Boss.' });
           await PocketTTSEngine.waitForCompletion();
           break;
@@ -271,6 +281,7 @@ export class VoicePipeline {
       try {
         this.stateMachine.transition(VoiceSessionState.WAKE_LISTENING);
       } catch (_e) {}
+      FloatingOverlayModule.updateOverlay('FRIDAY Standby', 'IDLE');
       this.isRunning = false;
       setTimeout(() => {
         FridaySpeechRecognizerNative?.startContinuousWakeListening?.();
@@ -291,6 +302,7 @@ export class VoicePipeline {
       this.stateMachine.transition(VoiceSessionState.INTERRUPTED);
     } catch (_e) {}
     useAgentStore.getState().setAgentState('IDLE');
+    FloatingOverlayModule.updateOverlay('Interrupted', 'IDLE');
     setTimeout(() => {
       try {
         this.stateMachine.transition(VoiceSessionState.WAKE_LISTENING);

@@ -3,6 +3,7 @@ import { TaskManager } from './task/taskManager';
 import { ReferenceResolver } from './memory/referenceResolver';
 import { SessionManager } from './session/sessionManager';
 import { AccessibilityModule } from '../native/AccessibilityModule';
+import { FloatingOverlayModule } from '../native/FloatingOverlayModule';
 import { useAgentStore } from '../state/agentStore';
 import { TelemetryLogger } from '../utils/telemetry';
 import { SemanticLayer } from './semanticLayer';
@@ -11,6 +12,7 @@ import { ProviderFactory } from './providers/providerFactory';
 import { ModelMessage, ModelProvider } from './providers/types';
 import { MemoryStore } from '../memory/store';
 import { ScopedMemoryRetriever } from '../memory/retriever';
+import { PersonaManager } from '../memory/personaManager';
 import { ConversationManager } from './conversationManager';
 import { resolveIntent } from './providers/intentFastPath';
 
@@ -70,6 +72,7 @@ export class FridayAgent {
         ConversationManager.addTurn('assistant', spokenAnswer);
         useAgentStore.getState().setAgentState('SUCCESS');
         useAgentStore.getState().setLastResponse(spokenAnswer);
+        await FloatingOverlayModule.updateOverlay('Verified ✓', 'SUCCESS');
         TelemetryLogger.recordEvent('TASK_COMPLETED', {
           goal: rawGoal,
           durationMs: Date.now() - taskStartTime,
@@ -80,6 +83,7 @@ export class FridayAgent {
       // 1.5 CONVERSATIONAL / Q&A / TRIVIA DIRECT PATH
       if (this.isDirectConversationalQuery(resolvedGoal, evalResult.type)) {
         useAgentStore.getState().setAgentState('THINKING');
+        await FloatingOverlayModule.showOverlay('Thinking...', 'THINKING');
         SessionManager.addTurn('user', rawGoal, undefined, { ...entities, correctedTranscript: semantic.correctedTranscript });
 
         const spokenAnswer = await this.executeConversationalQuery(resolvedGoal);
@@ -87,6 +91,7 @@ export class FridayAgent {
         SessionManager.addTurn('assistant', spokenAnswer, undefined);
         useAgentStore.getState().setAgentState('SUCCESS');
         useAgentStore.getState().setLastResponse(spokenAnswer);
+        await FloatingOverlayModule.updateOverlay('Verified ✓', 'SUCCESS');
 
         TelemetryLogger.recordEvent('TASK_COMPLETED', {
           goal: rawGoal,
@@ -109,6 +114,7 @@ export class FridayAgent {
         useAgentStore.getState().setAgentState('ERROR');
         useAgentStore.getState().setLastResponse(reply);
         useAgentStore.getState().setError(reply);
+        await FloatingOverlayModule.updateOverlay('Accessibility required', 'ERROR');
         SessionManager.addTurn('assistant', reply, task.currentApp);
         TelemetryLogger.recordEvent('TASK_BLOCKED', { reason: 'accessibility_disabled', goalType: task.goalType });
         return reply;
@@ -138,10 +144,14 @@ export class FridayAgent {
   }
 
   private isDirectConversationalQuery(goal: string, evalType: string): boolean {
-    const lower = goal.toLowerCase();
+    const lower = goal.toLowerCase().trim();
+
+    if (resolveIntent(lower)) {
+      return false;
+    }
 
     // Explicit action patterns must go to TaskManager/AgentLoop
-    const actionKeywords = /\b(open|launch|play|send|message|call|dial|turn on|turn off|set volume|set brightness|set alarm|close|flashlight|torch|bluetooth|wifi|hotspot)\b/i;
+    const actionKeywords = /\b(open|launch|play|send|message|call|dial|turn on|turn off|set volume|set brightness|set alarm|close|flashlight|torch|bluetooth|wifi|hotspot|kill|force stop|force-stop|root|shizuku|elevated|permission)\b/i;
     if (actionKeywords.test(lower)) {
       return false;
     }
@@ -164,27 +174,22 @@ export class FridayAgent {
         content: t.content,
       }));
 
-      const memoryContext = memoryFacts.map((f) => `- ${f.key}: ${f.value}`).join('\n');
+      const memoryContext = ScopedMemoryRetriever.formatContext(query, 'conversational');
 
       const systemPrompt: ModelMessage = {
         role: 'system',
-        content: `You are F.R.I.D.A.Y. (Female Replacement Intelligent Digital Assistant Youth), Tony Stark's / Boss's ultra-intelligent, tactical AI assistant (voiced by Kerry Condon).
-[VOICE & CONVERSATION RULES]
-1. Speak exclusively in clear, natural English.
-2. ALWAYS address the user as "Boss" in every interaction naturally.
-3. Be tactical, crisp, witty, intelligent, and unflappable. Provide direct answers to questions.
-4. Keep spoken responses concise (2 to 4 sentences max) and optimized for audio text-to-speech. Never output robotic error dumps or raw JSON leaks.
-5. Do NOT use markdown symbols (no asterisks, backticks, hashes, or bullet points).
-${memoryContext ? `\n[KNOWN USER FACTS]\n${memoryContext}` : ''}`,
+        content: `${PersonaManager.getSystemPersonaPrompt()}\n\n${memoryContext}`,
       };
 
       ConversationManager.addTurn('user', query);
       const messages: ModelMessage[] = [systemPrompt, ...conversationHistory, { role: 'user', content: query }];
       const textResponse = await this.provider.generateText(messages);
-      const cleanResponse = textResponse?.trim() || "All systems nominal, Boss. How can I assist?";
-      ConversationManager.addTurn('assistant', cleanResponse);
+      const formattedResponse = PersonaManager.formatSpokenResponse(
+        textResponse?.trim() || 'All systems nominal, Boss. How can I assist?'
+      );
+      ConversationManager.addTurn('assistant', formattedResponse);
 
-      return cleanResponse;
+      return formattedResponse;
     } catch (_err) {
       return "I'm having a little trouble pulling that up right now, Boss.";
     }

@@ -83,3 +83,36 @@ export interface ISystemControlModule {
   getInstalledApps(): Promise<Array<{ appName: string; packageName: string }>>;
 }
 ```
+
+### D. RootControlModule (`src/native/RootControlModule.ts` — ADR-014)
+```typescript
+export interface ElevatedStatus {
+  shizukuAvailable: boolean;
+  shizukuPermission: boolean;
+  rootAvailable: boolean;
+  elevatedAvailable: boolean;
+  activeTier: 'SHIZUKU' | 'ROOT' | 'NONE';
+}
+
+export interface ElevatedExecutionResult {
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  error?: string;
+}
+
+export interface IRootControlModule {
+  isShizukuAvailable(): Promise<boolean>;
+  hasShizukuPermission(): Promise<boolean>;
+  requestShizukuPermission(): Promise<boolean>;
+  isRootAvailable(): Promise<boolean>;
+  getElevatedStatus(): Promise<ElevatedStatus>;
+  executeElevatedShell(command: string): Promise<ElevatedExecutionResult>;
+  inputTap(x: number, y: number): Promise<boolean>;
+  inputText(text: string): Promise<boolean>;
+  inputKey(keyCode: number | string): Promise<boolean>;
+  killProcess(packageName: string): Promise<boolean>;
+  grantPermission(packageName: string, permission: string): Promise<boolean>;
+}
+```

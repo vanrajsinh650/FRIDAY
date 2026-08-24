@@ -238,7 +238,7 @@ export class Planner {
             description: 'Launch YouTube app',
           };
         }
-        if (waitCount < 2) {
+        if (waitCount < 4) {
           return {
             id: `step_${Date.now()}`,
             toolName: 'wait_for_element',
@@ -395,7 +395,7 @@ export class Planner {
             description: 'Launch WhatsApp',
           };
         }
-        if (waitCount < 2) {
+        if (waitCount < 4) {
           return {
             id: `step_${Date.now()}`,
             toolName: 'wait_for_element',

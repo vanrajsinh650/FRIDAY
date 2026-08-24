@@ -31,6 +31,12 @@ export interface PlannedAction {
   };
 }
 
+export interface VisualContextSnapshot {
+  isSparse: boolean;
+  screenshotBase64?: string;
+  elementsSummary?: string;
+}
+
 export interface AgentContextSnapshot {
   activeGoal: string;
   goalType: GoalType;
@@ -39,4 +45,5 @@ export interface AgentContextSnapshot {
   recentActionHistory: string[];
   conversationHistory: ConversationTurn[];
   activeTask?: TaskState;
+  visualContext?: VisualContextSnapshot;
 }

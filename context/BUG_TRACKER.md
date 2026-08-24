@@ -29,6 +29,7 @@
 | BUG-014 | Piecewise math discontinuity in audio pre-amp soft-limiter | P1 | Verified | `android/voice/FarFieldAudioPreprocessor.kt` | Instant drop of 5,279 amplitude units (~16% of full scale) when audio crossed 28,000 threshold | Implemented smooth C1 continuous soft-knee tanh compression curve (T=24000, M=32767) |
 | BUG-015 | Native Accessibility Binder handle leak & double-recycle crash | P0 | Verified | `android/accessibility/FridayAccessibilityService.kt` | Early returns without recycling AccessibilityNodeInfo; double recycle when focused === root | Wrapped in try/finally recycling blocks with object identity checks before recycling |
 | BUG-016 | 900 anim/sec rAF animation storm on JS thread | P1 | Verified | `src/components/VoiceWaveform.tsx` | Spawning 15 Animated.timing instances inside 60fps requestAnimationFrame loop | Used direct Animated.Value.setValue() in rAF loop without allocating timing objects |
+| BUG-021 | Privileged IPC stream deadlocks, shell command injection & Shizuku lifecycle risks | P0 | Verified | `android/modules/RootControlTurboModule.kt`, `src/native/RootControlModule.ts`, `src/tools/rootControlTools.ts`, `AndroidManifest.xml` | Sequential stream reading blocked on OS pipe buffer; unvalidated package/permission shell interpolation; missing Shizuku permission; un-sanitized newlines | Implemented concurrent stream draining, finally process cleanup, strict regex validation for packages & permissions, control char sanitization, AndroidManifest API_V23 permission, and fallback error propagation |
 
 ---
 
@@ -147,3 +148,30 @@
   - Introduced `ActionSafetyGuard.ts` in the TypeScript layer to categorize utterances into `NOISE`, `STOP`, `INCOMPLETE_ACTION`, `CONVERSATIONAL`, or `ACTIONABLE`.
   - Configured single-breath compound execution: when an actionable or conversational command is present after the wake word, FRIDAY executes the goal immediately with zero intermediate wake greeting interruptions.
   - Standalone wake words ("Hey Friday") transition to `WAKE_DETECTED` and speak a tactical acknowledgment before opening the multi-turn session.
+
+### [BUG-021] Privileged IPC Stream Deadlocks, Shell Command Injection & Shizuku Lifecycle Risks
+
+- **Severity:** P0 (IPC Deadlock, Process Leak & Shell Injection Security)
+- **Status:** Verified
+- **Component:** `android/app/src/main/java/com/friday/modules/RootControlTurboModule.kt`, `src/native/RootControlModule.ts`, `src/tools/rootControlTools.ts`, `src/agent/loop/stepExecutor.ts`, `android/app/src/main/AndroidManifest.xml`
+- **Reproduction Steps:**
+  1. Execute elevated shell command producing large (>64KB) stderr output before closing stdout: Kotlin thread deadlocks on sequential `readText()` calls.
+  2. Call `inputText` with multi-line text (e.g. `"hello\nreboot"`): newline breaks out of single-quoted `input text '...'` shell command and executes `reboot`.
+  3. Call `kill_app_silent` with malicious package name (e.g. `"com.app; reboot"`): unvalidated string directly interpolated into `am force-stop`.
+  4. Call `elevated_tap` with negative numbers or NaN: passes invalid floats to shell input tap.
+  5. Shizuku manager dialog dismissed or server dies: listener leaked, React promise hangs indefinitely.
+- **Expected Behavior:** Concurrent, non-blocking stream drainage; guaranteed process cleanup in `finally` blocks; strict regex validation on package and permission strings; sanitization of control chars/newlines; Shizuku lifecycle timeout and Binder dead listener; explicit error propagation on elevated fallback failures.
+- **Actual Behavior:** Sequential stream reading blocked on OS pipe buffer; processes leaked without `destroy()`; raw strings interpolated into shell; missing `moe.shizuku.manager.permission.API_V23` permission in `AndroidManifest.xml`.
+- **Root Cause Analysis:**
+  1. Sequential `process.inputStream.readText()` then `process.errorStream.readText()` created a classic Java `Process` pipe deadlock when the kernel buffer filled.
+  2. `executeCommandAndResolveBoolean` never consumed or closed process standard streams.
+  3. Kotlin and TS layers lacked regex validation on package and permission names, permitting arbitrary shell parameter concatenation.
+  4. `AndroidManifest.xml` was missing Shizuku's required `moe.shizuku.manager.permission.API_V23` permission declaration.
+- **Fix & Regression Test:**
+  - Implemented non-blocking concurrent stream draining via `async(Dispatchers.IO)` and guaranteed `destroyProcessSafely()` in `finally` blocks.
+  - Added strict regex validation (`PACKAGE_NAME_REGEX`, `PERMISSION_REGEX`) and input coordinate checks (`NaN`, `Infinity`, `< 0`).
+  - Added control character and newline sanitization for `inputText` / `elevated_text`.
+  - Added `moe.shizuku.manager.permission.API_V23` in `AndroidManifest.xml`.
+  - Added 30-second watchdog and `Shizuku.OnBinderDeadListener` in `requestShizukuPermission`.
+  - Enhanced `StepExecutor` error propagation when elevated fallback fails.
+  - Comprehensive unit and edge-case test suite (`rootControl.test.ts`) covering all 177 tests green.

@@ -7,6 +7,7 @@ import { ContextManager } from '../context';
 import { RecoveryManager } from '../recovery';
 import { AccessibilityModule } from '../../native/AccessibilityModule';
 import { SystemControlModule } from '../../native/SystemControlModule';
+import { FloatingOverlayModule } from '../../native/FloatingOverlayModule';
 import { useAgentStore } from '../../state/agentStore';
 
 export class AgentLoop {
@@ -30,10 +31,13 @@ export class AgentLoop {
     let lastExecutedTool = '';
     let lastToolResultData: any = null;
 
+    await FloatingOverlayModule.showOverlay('Planning next move...', 'PLANNING');
+
     while (!task.verified && task.stepCount < task.maxSteps) {
       if (SessionManager.isCancelled()) {
         task.status = 'CANCELLED';
         SessionManager.emitEvent('TASK_CANCELLED', { taskId: task.id, reason: 'Session cancelled' });
+        await FloatingOverlayModule.updateOverlay('Task stopped', 'IDLE');
         return { success: false, spokenResponse: 'Task stopped as requested, Boss.', stepsExecuted: task.stepCount };
       }
 
@@ -83,6 +87,21 @@ export class AgentLoop {
 
       // 4. ACT: Execute step
       useAgentStore.getState().setAgentState('EXECUTING');
+      let overlayStatus = plannedAction.description || `Executing ${plannedAction.toolName}...`;
+      if (plannedAction.toolName === 'launch_app') {
+        const app = plannedAction.parameters?.packageNameOrName || plannedAction.parameters?.packageName || 'app';
+        const cleanApp = app.replace('com.google.android.', '').replace('com.', '');
+        overlayStatus = `Opening ${cleanApp.charAt(0).toUpperCase() + cleanApp.slice(1)}...`;
+      } else if (plannedAction.toolName === 'click_first_result' || plannedAction.toolName === 'play_media') {
+        overlayStatus = 'Playing video...';
+      } else if (plannedAction.toolName === 'click_send_button') {
+        overlayStatus = 'Sending message...';
+      } else if (plannedAction.toolName === 'type_text') {
+        const txt = plannedAction.parameters?.text;
+        overlayStatus = txt ? `Typing "${txt.length > 20 ? txt.slice(0, 17) + '...' : txt}"...` : 'Typing...';
+      }
+      await FloatingOverlayModule.showOverlay(overlayStatus, 'EXECUTING');
+
       const stepRecord = await StepExecutor.executeStep(plannedAction);
       lastExecutedTool = plannedAction.toolName;
       task.actionHistory.push(stepRecord);
@@ -109,6 +128,7 @@ export class AgentLoop {
 
       // 6. POST-ACTION OBSERVATION & FINGERPRINT COMPARISON
       useAgentStore.getState().setAgentState('VERIFYING');
+      await FloatingOverlayModule.updateOverlay('Verifying action...', 'VERIFYING');
       const updatedScreen = await AccessibilityModule.inspectScreen();
       const newFingerprint = AccessibilityModule.computeFingerprint(updatedScreen);
 
@@ -184,6 +204,19 @@ export class AgentLoop {
         finalSpokenResponse = 'Background apps cleared, Boss.';
       } else if (tool === 'close_current_app' || tool === 'close_app') {
         finalSpokenResponse = 'App closed, Boss.';
+      } else if (tool === 'kill_app_silent') {
+        const pkg = lastAction?.parameters?.packageName || 'app';
+        finalSpokenResponse = `Force stopped ${pkg}, Boss.`;
+      } else if (tool === 'check_elevated_status') {
+        const status = lastToolResultData?.data || lastToolResultData;
+        const tier = status?.activeTier || 'NONE';
+        if (tier === 'SHIZUKU') {
+          finalSpokenResponse = 'Shizuku privileged control is active and authorized, Boss.';
+        } else if (tier === 'ROOT') {
+          finalSpokenResponse = 'Root elevated control is active and authorized, Boss.';
+        } else {
+          finalSpokenResponse = 'No elevated privileges are currently active, Boss.';
+        }
       } else if (task.goalType === 'MEDIA_PLAYBACK') {
         finalSpokenResponse = 'Playing that for you now, Boss.';
       } else if (task.goalType === 'MESSAGING') {
@@ -200,6 +233,7 @@ export class AgentLoop {
     if (task.verified) {
       useAgentStore.getState().setAgentState('SUCCESS');
       useAgentStore.getState().setLastResponse(finalSpokenResponse);
+      await FloatingOverlayModule.updateOverlay('Verified ✓', 'SUCCESS');
     } else {
       if (task.goalType === 'MEDIA_PLAYBACK') {
         finalSpokenResponse = "I opened YouTube, but couldn't verify if the video started playing, Boss.";
@@ -210,6 +244,7 @@ export class AgentLoop {
       }
       useAgentStore.getState().setLastResponse(finalSpokenResponse);
       useAgentStore.getState().setError(finalSpokenResponse);
+      await FloatingOverlayModule.updateOverlay('Action unverified', 'ERROR');
     }
     SessionManager.emitEvent('TASK_COMPLETED', {
       taskId: task.id,

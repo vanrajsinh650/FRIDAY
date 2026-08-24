@@ -87,7 +87,7 @@ export class ActionSafetyGuard {
       words.some(w => this.CONVERSATIONAL_KEYWORDS.has(w)) ||
       /^(who are you|how are you|what can you do|what time is it|what is the time|what is my battery|battery status|battery level|battery percentage|wake up|hey friday|hi friday|hello friday|what is today|help)\b/i.test(normalized);
 
-    if (isConversational && !/(play|open|launch|send|call)\b/i.test(normalized)) {
+    if (isConversational && !/(play|open|launch|send|call|kill|force stop|root|shizuku|elevated|torch|flashlight|wifi|bluetooth|hotspot)\b/i.test(normalized)) {
       return { type: 'CONVERSATIONAL', cleanedText: text, wordCount: words.length };
     }
 

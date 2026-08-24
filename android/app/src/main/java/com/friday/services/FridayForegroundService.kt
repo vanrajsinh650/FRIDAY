@@ -224,6 +224,11 @@ class FridayForegroundService : Service() {
             activeQueryThread = Thread({
                 Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
 
+                // Safe hardware settle delay to ensure AudioFlinger releases previous client track
+                try {
+                    Thread.sleep(80)
+                } catch (_: InterruptedException) {}
+
                 val minBufSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
                 val bufferSize = max(if (minBufSize > 0) minBufSize * 2 else 4096, 4096)
 
@@ -419,14 +424,14 @@ class FridayForegroundService : Service() {
 
     private fun containsWakeWord(text: String): Boolean {
         val pattern = Pattern.compile(
-            """\b(?:hey|hi|ok|okay|hello|yo|aye|suno|arre|dear)?\s*(?:friday|fri\s*day|fried\s*day|fry\s*day|freeday|frida|fridays|friday's)\b""",
+            """\b(?:hey|hi|ok|okay|hello|yo|aye|suno|arre|dear)?\s*(?:friday|fri\s*day|fried\s*day|fry\s*day|freeday|frida|fridays|friday's|vega|veega|vaga)\b""",
             Pattern.CASE_INSENSITIVE
         )
         return pattern.matcher(text).find()
     }
 
     private var lastBackgroundTranscribeTimestamp = 0L
-    private val MIN_BACKGROUND_TRANSCRIBE_INTERVAL_MS = 2500L
+    private val MIN_BACKGROUND_TRANSCRIBE_INTERVAL_MS = 800L
 
     private fun handleWakeDetected(preRollAudio: ShortArray?) {
         if (isFridaySpeaking || isActiveQueryRecording || preRollAudio == null || preRollAudio.isEmpty()) {
@@ -475,7 +480,7 @@ class FridayForegroundService : Service() {
 
     private fun extractTrailingCommand(text: String): String {
         val pattern = Pattern.compile(
-            """^(?:\b(?:hey|hi|ok|okay|hello|yo|aye|suno|arre|dear)?\s*(?:friday|fri\s*day|fried\s*day|fry\s*day|freeday|frida|fridays|friday's)\b[\s,:;!?-]*)(.*)$""",
+            """^(?:\b(?:hey|hi|ok|okay|hello|yo|aye|suno|arre|dear)?\s*(?:friday|fri\s*day|fried\s*day|fry\s*day|freeday|frida|fridays|friday's|vega|veega|vaga)\b[\s,:;!?-]*)(.*)$""",
             Pattern.CASE_INSENSITIVE
         )
         val matcher = pattern.matcher(text)
@@ -515,7 +520,7 @@ class FridayForegroundService : Service() {
 
                     val langCode = if (!language.isNullOrBlank()) language.split("-", "_")[0].lowercase() else "en"
                     requestBodyBuilder.addFormDataPart("language", langCode)
-                    requestBodyBuilder.addFormDataPart("prompt", "FRIDAY, Boss, Iron Man, Tony Stark, assistant.")
+                    requestBodyBuilder.addFormDataPart("prompt", "FRIDAY, Hey Friday, Boss, Tony Stark, YouTube, WhatsApp, Taarak Mehta, open, play, call, send, search, volume, battery, alarms, flashlight, Vega.")
 
                     val request = Request.Builder()
                         .url("https://api.groq.com/openai/v1/audio/transcriptions")

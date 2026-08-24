@@ -25,6 +25,7 @@
 | **ADR-017** | Strict Iron Man F.R.I.D.A.Y. Persona & "Boss" Identity Locking | **Accepted** | 2026-08-23 |
 | **ADR-018** | Silent AudioRecord HAL Engine, Groq Whisper RAM Pipeline & Multi-Turn Session | **Accepted** | 2026-08-23 |
 | **ADR-019** | Comprehensive 42-Defect Hardening, Soft-Knee DSP Limiter & Clean Lifecycle Architecture | **Accepted** | 2026-08-24 |
+| **ADR-020** | Persistent Floating Overlay HUD (`TYPE_APPLICATION_OVERLAY`) for 24/7 Multi-App State Visibility | **Accepted** | 2026-08-24 |
 
 ---
 
@@ -132,3 +133,18 @@
   - 100% zero-regression preservation of all working features.
   - Zero binder memory leaks or native thread deadlocks.
   - Rock-solid background reliability on Vivo V19 and all modern Android devices.
+
+### ADR-020: Persistent Floating Overlay HUD (`TYPE_APPLICATION_OVERLAY`) for 24/7 Multi-App State Visibility
+- **Context:**
+  When third-party apps (e.g. YouTube, WhatsApp, Settings) are launched in foreground during multi-step automation or voice tasks, Android minimizes or covers FRIDAY's main Activity. Users were left with no visual feedback on task progression or live state, making it feel like FRIDAY "disappeared" or died in the background.
+- **Decision:**
+  Implement a dedicated, persistent 24/7 Floating Holographic Overlay HUD (`FridayFloatingOverlayService.kt` and `FloatingOverlayTurboModule.kt`):
+  1. **WindowManager Application Overlay:** Utilizes `WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY` with `FLAG_NOT_FOCUSABLE` and `FLAG_LAYOUT_IN_SCREEN` to render a compact, draggable HUD over any foreground application.
+  2. **Holographic Arc Reactor / Pill Aesthetic:** Programmatically constructed dark glass pill HUD with glowing cyan neon border and dynamic pulsing orb indicating real-time system states (`LISTENING`, `THINKING`, `EXECUTING`, `VERIFYING`, `SUCCESS`, `ERROR`).
+  3. **Real-time Pipeline Integration:** Deeply wired into `agentLoop.ts`, `agent.ts`, and `voicePipeline.ts` to reflect step-by-step progress ("Opening YouTube...", "Typing text...", "Playing video...", "Verified ✓").
+  4. **Interactive Controls:** Includes a quick mic button (🎤) to trigger voice capture directly from anywhere in the OS, a quick close button (✕), and a body tap gesture that brings `MainActivity` to the foreground.
+  5. **Auto-Dismiss & Memory Safety:** Safely attaches/detaches from `WindowManager` on the main Looper thread, automatically auto-dismisses on task success after 7 seconds, and prevents any window leak.
+- **Consequences:**
+  - Fixes the "FRIDAY disappears/closes when apps open" usability issue completely.
+  - Provides continuous visual feedback during complex multi-step background operations.
+  - Preserves 100% backward compatibility and test stability.

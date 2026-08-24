@@ -5,8 +5,11 @@ import { ToolCallResult } from './types';
 // Fast perception/reasoning tier: fixed ladder of English patterns mapping
 // an utterance straight onto a tool call or crisp Iron Man F.R.I.D.A.Y. response.
 //
-// `lastUserMsg` must already be lower-cased and trimmed by the caller.
 export function resolveIntent(lastUserMsg: string): ToolCallResult | null {
+  if (!lastUserMsg) return null;
+  // Strip any vision prompt injection or trailing multiline annotations
+  const cleanedMsg = lastUserMsg.split(/\n\s*\[screen vision\]/i)[0].trim().toLowerCase();
+  lastUserMsg = cleanedMsg || lastUserMsg.toLowerCase().trim();
   // 0. App Launch Fast-Path
   if (
     lastUserMsg.startsWith('open ') ||
@@ -149,6 +152,36 @@ export function resolveIntent(lastUserMsg: string): ToolCallResult | null {
     lastUserMsg === 'close'
   ) {
     return { toolName: 'close_current_app', parameters: {} };
+  }
+
+  // 6.1 Force Stop / Kill App (Elevated Fast-Path)
+  if (
+    lastUserMsg.startsWith('force stop ') ||
+    lastUserMsg.startsWith('force-stop ') ||
+    lastUserMsg.startsWith('force close ') ||
+    lastUserMsg.startsWith('kill app ') ||
+    lastUserMsg.startsWith('silent kill ')
+  ) {
+    const firstLine = lastUserMsg.split('\n')[0].trim();
+    const pkg = firstLine
+      .replace(/^(force stop|force-stop|force close|kill app|silent kill)\s+/i, '')
+      .replace(/\s+app$/i, '')
+      .trim();
+    if (pkg.length > 0) {
+      return { toolName: 'kill_app_silent', parameters: { packageName: pkg } };
+    }
+  }
+
+  // 6.2 Check Elevated / Root / Shizuku Status
+  if (
+    lastUserMsg.includes('root status') ||
+    lastUserMsg.includes('shizuku status') ||
+    lastUserMsg.includes('check elevated') ||
+    lastUserMsg.includes('check root') ||
+    lastUserMsg.includes('is phone rooted') ||
+    lastUserMsg.includes('is device rooted')
+  ) {
+    return { toolName: 'check_elevated_status', parameters: {} };
   }
 
   // 7. Alarms & Timers

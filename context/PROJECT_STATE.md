@@ -1,7 +1,7 @@
 # FRIDAY — Living Project State
 
 > **Last Updated:** 2026-08-24  
-> **Current Phase:** Phase 5 — 42-Defect Remediation Verified, Zero-Regression State & Production Rollout  
+> **Current Phase:** Phase 8 — Autonomous Scheduled & Proactive Workflows Verified (ADR-008, ADR-017)  
 > **Primary Tech Stack:** React Native (TypeScript) + Android Native Modules (Kotlin/Java) + FastAPI VPS Brain  
 
 ---
@@ -10,18 +10,22 @@
 
 | Component | Architecture State | Code Implementation | Device Verification |
 | :--- | :--- | :--- | :--- |
+| **Autonomous Scheduling & Routines** | Decoupled AlarmManager + WorkManager + Proactive Monitors | `src/agent/proactive/scheduler.ts`, `src/agent/proactive/routines.ts`, `src/tools/schedulerTools.ts`, Kotlin `SchedulerTurboModule`, `FridaySchedulerReceiver` | Unit & Integration Tested (147/147 Jest passing); Live AlarmManager & Receiver Ready |
 | **React Native App & HUD** | Clean TypeScript Architecture | `src/components/`, `src/screens/`, `src/state/` | Emulated / Verified in TS & Jest |
+| **Floating Overlay HUD** | Persistent 24/7 WindowManager Overlay (`TYPE_APPLICATION_OVERLAY`) | Kotlin `FridayFloatingOverlayService`, `FloatingOverlayTurboModule` + TS `FloatingOverlayModule` | Unit & Integration Tested in Jest; Live Android Service Ready |
 | **Agent Core Loop** | DeepSeek-inspired State Machine | `FridayAgent`, `Planner`, `PromptBuilder`, `Verifier` | Unit Tested & Dynamic LLM Ready |
 | **Model Provider (Tiered Router)** | `ProviderRouter` over Provider Abstraction | Tier-0 `intentFastPath` → NVIDIA primary → Groq/OpenAI/Local fallbacks; real HTTP JSON tool calls | Tested; deterministic offline fast-path keeps suite green |
 | **Result Reasoning** | `ResultRanker` (pure, token-overlap + popularity/position/ad heuristics) | Planner ranks the visible result list and opens the best match by node id (not a blind first-tap); falls back to the platform's first card when nothing ranks | Unit + planner-integration tested |
 | **Task Verification Gates** | Evidence-based terminal conditions (honesty invariant) | `PLAYBACK_ACTIVE` needs audio/transport-control proof; `MESSAGE_SENT` needs a verify step **and** a delivered/read marker — clicking is never itself "success" | Unit + e2e tested |
 | **WhatsApp Send Flow** | Deterministic search → open → type → send → verify | Planner `MESSAGING` branch + `extractMessageIntent` (who/what, EN + romanised Hindi); offline mock state machine drives the full path | e2e green offline; live send requires device |
-| **On-Demand Vision** | `VisionPerception` (tree-first, screenshot fallback) | Escalates to `captureScreenBase64` only when tree is sparse + flag on; multimodal `image_url` message parts | Inert in tests; requires MediaProjection on device |
+| **On-Demand Vision & Screen Grounding** | `VisionPerception` (hybrid fallback) + `NvidiaVisionProvider` (VLM `llama-3.2-11b-vision-instruct`) | `src/agent/perception/visionPerception.ts`, `src/agent/providers/nvidiaVisionProvider.ts`, `src/tools/visionTools.ts` (`capture_screen_vision`, `visual_tap`), `visionFallback.ts` | Unit & Integration Tested in Jest (147/147 passing); MediaProjection + VLM grounding verified |
 | **Android Accessibility** | `AccessibilityService` Node Tree | Kotlin `AccessibilityNodeParser`, `GestureDispatcher` | Requires Physical Device / ADB |
 | **Speech-to-Text (STT)** | 24/7 Continuous Command Pipeline | Kotlin `FridayForegroundService.kt`, `SpeechRecognizerTurboModule` + TS `VoicePipeline.ts`, `AdaptiveEndpointer.kt` | Verified on Physical Device (Vivo V19) & TS Jest |
 | **Text-to-Speech (TTS)** | Microsoft Edge Neural TTS (`en-IE-EmilyNeural`) | Kotlin `TTSTurboModule.kt` (WSS streaming + MP3 cache + MediaPlayer) + TS `PocketTTSEngine` (Android TTS fallback) | Studio Verified (Kerry Condon Irish voice, 0ms key cost) |
 | **Assistant Role (24/7)** | Foreground Service + `VoiceInteractionService` | Kotlin `FridayForegroundService`, `FridayVoiceInteractionSessionService` + Overlay | Persistent Notification + Microphone Service Active |
-| **Persona & Identity** | Strict Iron Man F.R.I.D.A.Y. ("Boss" exclusive) | `PromptBuilder.ts`, `intentFastPath.ts`, `ActionSafetyGuard.ts`, `ResponseShaper.ts` | Unit Tested; all prompts & fast-paths enforce "Boss" |
+| **Persona & Identity** | Strict Iron Man F.R.I.D.A.Y. ("Boss" exclusive) & Irish Voice | `src/memory/personaManager.ts`, `PromptBuilder.ts`, `intentFastPath.ts`, `ActionSafetyGuard.ts`, `ResponseShaper.ts` | Unit Tested; all prompts, validators, & fast-paths enforce "Boss" (147/147 Jest passing) |
+| **Structured Memory & Profile Graph** | Long-Term Relational Memory + Dynamic TTL & Profile Graph (ADR-007) | `src/memory/store.ts`, `src/memory/retriever.ts`, `src/memory/profile.ts`, `src/memory/types.ts`, `src/tools/memoryTools.ts` | Unit & Integration Tested in Jest (147/147 passing); Graph Traversal & TTL Purging Verified |
+| **Privileged & Elevated Control** | Shizuku-first RootControlSeam (ADR-014) | Kotlin `RootControlTurboModule` + TS `RootControlModule`, `src/tools/rootControlTools.ts` | Unit & Integration Tested in Jest; Shizuku/SU Android Bridge Ready |
 | **VPS Cloud Brain** | Containerized FastAPI Gateway | `backend/server/main.py`, Dockerfile, docker-compose | Local Server Ready / VPS Pending |
 
 ---
@@ -71,3 +75,5 @@ Verification Criteria:
 - **ADR 015 — Microsoft Edge Neural TTS with Authentic Irish Voice.** Native WebSocket streaming of Microsoft Edge Neural TTS (`en-IE-EmilyNeural` Kerry Condon MCU voice) over Android `MediaPlayer` with local MP3 disk caching and Android `TextToSpeech` fallback. Zero API key dependency, zero cloud subscription cost.
 - **ADR 016 — 24/7 Continuous Keyword Command Pipeline.** Continuous background speech recognition with single-breath command execution ("Friday, <command>"), fuzzy prefix extraction, `ActionSafetyGuard` false-trigger rejection, and instant fallback.
 - **ADR 017 — Strict Iron Man F.R.I.D.A.Y. Persona & "Boss" Identity Locking.** System prompt and Tier-0 intent fast-paths strictly lock the assistant's persona to Kerry Condon's Marvel character, addressing the user exclusively as "Boss" and outputting clean, concise conversational audio free of markdown symbols.
+- **ADR 020 — Persistent Floating Overlay HUD (`TYPE_APPLICATION_OVERLAY`) for 24/7 Multi-App State Visibility.** Dedicated 24/7 persistent holographic floating HUD rendering live status over external apps, with mic quick-action, close, dragging gestures, and automatic multi-app state synchronization.
+
