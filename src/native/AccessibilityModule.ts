@@ -37,6 +37,10 @@ function setGlobalMockTree(tree: ScreenTree) {
 
 export class AccessibilityModule {
   static resetMockTree(): void {
+    try {
+      const { SystemControlModule } = require('./SystemControlModule');
+      SystemControlModule.setMockMediaPlaying(false);
+    } catch (_e) {}
     setGlobalMockTree({
       activePackage: 'com.android.launcher',
       activeActivity: 'HomeScreenActivity',
@@ -621,5 +625,16 @@ export class AccessibilityModule {
       elementsSummary: elementsSummary || 'No distinct text elements found',
       visibleTexts,
     };
+  }
+
+  static async triggerCameraShutter(): Promise<boolean> {
+    if (FridayAccessibilityNative?.triggerCameraShutter) {
+      try {
+        return await FridayAccessibilityNative.triggerCameraShutter();
+      } catch (_e: any) {
+        return false;
+      }
+    }
+    return false;
   }
 }

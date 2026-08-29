@@ -259,15 +259,6 @@ export class VoicePipeline {
       VoiceTelemetry.startNewTurn();
       useAgentStore.getState().setAgentState('THINKING');
       this.stateMachine.transition(VoiceSessionState.THINKING);
-      FloatingOverlayModule.updateOverlay('Thinking...', 'THINKING');
-
-      const isAction = evalResult.type === 'ACTIONABLE';
-      if (isAction) {
-        const ack = VoicePipeline.quickAck();
-        useAgentStore.getState().setAgentState('SPEAKING');
-        PocketTTSEngine.speak({ text: ack });
-      }
-
       const actionStartTime = Date.now();
       const reply = await agent.executeGoal(queryToExecute);
       VoiceTelemetry.recordLatency('firstActionLatency', Date.now() - actionStartTime);

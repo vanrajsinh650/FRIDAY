@@ -307,12 +307,11 @@ export class VisionPerception {
     };
   }
 
-  // Return messages augmented with a screenshot ONLY when warranted. Otherwise
-  // the input is returned unchanged, so text-only reasoning is the default path.
   static async augment(messages: ModelMessage[], snapshot: AgentContextSnapshot): Promise<ModelMessage[]> {
-    const settings = useSettingsStore.getState();
-    if (!settings.visionFallbackEnabled) return messages;
-    if (!this.isTreeSparse(snapshot.screenTree)) return messages;
+    const isSparse = this.isTreeSparse(snapshot.screenTree);
+    if (!isSparse) {
+      return messages;
+    }
 
     let base64 = '';
     try {
@@ -320,25 +319,23 @@ export class VisionPerception {
       base64 = capture.base64;
     } catch (err: any) {
       Logger.warn('VisionPerception: screenshot capture threw', err?.message || err);
-      return messages;
     }
 
-    // No capture available (e.g. native module absent, or permission missing) —
-    // stay on the text path rather than sending an empty image.
     if (!base64) return messages;
 
-    Logger.info('VisionPerception: tree sparse, escalating to screenshot vision');
+    Logger.info('VisionPerception: Attaching live screen visual grounding to reasoning prompt');
     return this.attachImageToLastUser(messages, base64);
   }
 
   // Fold the screenshot into the last user turn as OpenAI-style content parts,
-  // preserving the existing text and adding a short instruction to use the image.
+  // preserving the existing text and adding the vision context.
   private static attachImageToLastUser(messages: ModelMessage[], base64Jpeg: string): ModelMessage[] {
     const out = [...messages];
     let idx = -1;
     for (let i = out.length - 1; i >= 0; i--) {
       if (out[i].role === 'user') {
         idx = i;
+        break;
       }
     }
     if (idx === -1) return messages;
@@ -348,8 +345,8 @@ export class VisionPerception {
       {
         type: 'text',
         text:
-          `${existingText}\n\n[SCREEN VISION] The accessibility tree for this screen was sparse, ` +
-          `so here is a screenshot of the current screen. Use it to decide the next action.`,
+          `${existingText}\n\n[LIVE SCREEN VISION] Here is the real-time visual capture of the active screen. ` +
+          `Use both the visible text and the visual screenshot to determine the exact action to execute.`,
       },
       { type: 'image_url', image_url: { url: toImageDataUrl(base64Jpeg), detail: 'high' } },
     ];

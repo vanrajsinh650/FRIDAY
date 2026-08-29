@@ -112,13 +112,13 @@ export class ReferenceResolver {
     }
 
     // Extract explicit entities if present in current utterance
-    if (lower.includes('youtube') || lower.includes('play ') || lower.includes('gaana') || lower.includes('song')) {
+    if (lower.includes('youtube')) {
       resolvedApp = 'com.google.android.youtube';
       const searchMatch = input.match(/(?:search|find|play|dhoondo)\s+(.+?)(?:\s+(?:on|in)\s+youtube|\s+and\s+play|$)/i);
       if (searchMatch) {
         entities.searchQuery = searchMatch[1].trim();
       }
-    } else if (lower.includes('whatsapp') || lower.includes('send ') || lower.includes('message')) {
+    } else if (lower.includes('whatsapp')) {
       resolvedApp = 'com.whatsapp';
       const contactMatch = input.match(/(?:to|ko)\s+([a-zA-Z0-9\s]+?)(?:\s+(?:saying|message|that)|$)/i);
       if (contactMatch) {

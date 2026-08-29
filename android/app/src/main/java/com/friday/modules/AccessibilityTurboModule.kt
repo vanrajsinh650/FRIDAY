@@ -366,4 +366,15 @@ class AccessibilityTurboModule(private val reactContext: ReactApplicationContext
             promise.resolve("")
         }
     }
+
+    @ReactMethod
+    fun triggerCameraShutter(promise: Promise) {
+        val service = FridayAccessibilityService.instance
+        if (service == null) {
+            promise.resolve(false)
+            return
+        }
+        val ok = service.triggerCameraShutter()
+        promise.resolve(ok)
+    }
 }

@@ -8,7 +8,7 @@ import { ToolCallResult } from './types';
 export function resolveIntent(lastUserMsg: string): ToolCallResult | null {
   if (!lastUserMsg) return null;
   // Strip any vision prompt injection or trailing multiline annotations
-  const cleanedMsg = lastUserMsg.split(/\n\s*\[screen vision\]/i)[0].trim().toLowerCase();
+  const cleanedMsg = lastUserMsg.split(/\n\s*\[(live\s+)?screen\s+vision\]/i)[0].trim().toLowerCase();
   lastUserMsg = cleanedMsg || lastUserMsg.toLowerCase().trim();
   // 0. App Launch Fast-Path
   if (
@@ -65,29 +65,36 @@ export function resolveIntent(lastUserMsg: string): ToolCallResult | null {
     return { toolName: 'toggle_hotspot', parameters: { enabled: !isOff } };
   }
 
+  // 0.4 Elevated Status & Root Check Fast-Path
+  if (
+    lastUserMsg.includes('root status') ||
+    lastUserMsg.includes('check root') ||
+    lastUserMsg.includes('check elevated') ||
+    lastUserMsg.includes('elevated status')
+  ) {
+    return { toolName: 'check_elevated_status', parameters: {} };
+  }
+
+  // 0.5 Force Stop & Silent Kill Fast-Path
+  if (
+    lastUserMsg.startsWith('force stop ') ||
+    lastUserMsg.startsWith('force-stop ') ||
+    lastUserMsg.startsWith('kill ')
+  ) {
+    const firstLine = lastUserMsg.split('\n')[0].trim();
+    const pkg = firstLine
+      .replace(/^(force stop|force-stop|kill)\s+/i, '')
+      .replace(/\s+app$/i, '')
+      .trim();
+    if (pkg.length > 0) {
+      return { toolName: 'kill_app_silent', parameters: { packageName: pkg } };
+    }
+  }
+
   // 1. Natural Language Notification & Message Queries (English)
   if (
-    (lastUserMsg.includes('notification') ||
-      lastUserMsg.includes('notif') ||
-      lastUserMsg.includes('message') ||
-      lastUserMsg.includes('messages') ||
-      lastUserMsg.includes('msg') ||
-      lastUserMsg.includes('alert') ||
-      lastUserMsg.includes('alerts') ||
-      lastUserMsg.includes('text') ||
-      lastUserMsg.includes('sms')) &&
-    (lastUserMsg.includes('tell') ||
-      lastUserMsg.includes('read') ||
-      lastUserMsg.includes('check') ||
-      lastUserMsg.includes('any') ||
-      lastUserMsg.includes('new') ||
-      lastUserMsg.includes('show') ||
-      lastUserMsg.includes('what') ||
-      lastUserMsg.includes('who') ||
-      lastUserMsg.includes('get') ||
-      lastUserMsg.includes('list') ||
-      lastUserMsg.includes('summary') ||
-      lastUserMsg.includes('summarize'))
+    /\b(notifications?|notifs?|messages?|msgs?|alerts?|unread)\b/i.test(lastUserMsg) &&
+    /\b(tell|read|check|any|new|show|list|summary|summarize)\b/i.test(lastUserMsg)
   ) {
     return { toolName: 'read_notifications', parameters: { filterApp: '', limit: 10 } };
   }

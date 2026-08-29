@@ -28,6 +28,7 @@ const VALID_TRANSITIONS: Record<VoiceSessionState, VoiceSessionState[]> = {
     VoiceSessionState.SPEAKING,
     VoiceSessionState.LISTENING,
     VoiceSessionState.ACTIVE_CONVERSATION,
+    VoiceSessionState.INTERRUPTED,
     VoiceSessionState.ERROR,
     VoiceSessionState.SLEEPING,
   ],

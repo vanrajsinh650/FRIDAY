@@ -162,6 +162,10 @@ export class ToolRegistry {
     return Array.from(this.tools.values());
   }
 
+  static getAllToolDefinitions(): ToolDefinition[] {
+    return this.getAllTools();
+  }
+
   static getToolSchemas(): any[] {
     return Array.from(this.tools.values()).map((t) => ({
       type: 'function',

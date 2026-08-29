@@ -16,6 +16,7 @@ import { PersonaManager } from '../memory/personaManager';
 import { ConversationManager } from './conversationManager';
 import { resolveIntent } from './providers/intentFastPath';
 import { VisionPerception } from './perception/visionPerception';
+import { LifelongMemoryEngine } from '../memory/lifelong/LifelongMemoryEngine';
 
 export class FridayAgent {
   private loop: AgentLoop;
@@ -52,6 +53,9 @@ export class FridayAgent {
     TelemetryLogger.recordEvent('AGENT_STARTED', { goal: cleanGoal });
 
     try {
+      await LifelongMemoryEngine.getInstance().initialize();
+      LifelongMemoryEngine.getInstance().processConversationalTurn(rawGoal).catch(() => {});
+
       const semantic = SemanticLayer.process(cleanGoal, { activeApp: undefined, recentSearch: undefined });
       TelemetryLogger.recordEvent('SEMANTIC_PROCESSED', { 
         original: rawGoal, 
@@ -172,7 +176,7 @@ export class FridayAgent {
     }
 
     // Explicit action patterns must go to TaskManager/AgentLoop
-    const actionKeywords = /\b(open|launch|play|send|message|call|dial|turn on|turn off|set volume|set brightness|set alarm|close|flashlight|torch|bluetooth|wifi|hotspot|kill|force stop|force-stop|root|shizuku|elevated|permission)\b/i;
+    const actionKeywords = /\b(open|launch|play|send|message|call|dial|turn on|turn off|set volume|set brightness|set alarm|close|flashlight|torch|bluetooth|wifi|hotspot|kill|force stop|force-stop|root|shizuku|elevated|permission|capture|take|click|tap|press|photo|picture|camera|shutter|snap|shoot|scroll|swipe)\b/i;
     if (actionKeywords.test(lower)) {
       return false;
     }
@@ -195,7 +199,8 @@ export class FridayAgent {
         content: t.content,
       }));
 
-      const memoryContext = ScopedMemoryRetriever.formatContext(query, 'conversational');
+      const lifelongContext = LifelongMemoryEngine.getInstance().formatContextForPrompt(query);
+      const memoryContext = lifelongContext || ScopedMemoryRetriever.formatContext(query, 'conversational');
 
       const systemPrompt: ModelMessage = {
         role: 'system',

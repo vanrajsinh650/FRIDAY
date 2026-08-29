@@ -3,7 +3,7 @@ export interface ValidatedIntent {
   targetApp?: string;
   actionVerb?: string;
   parameters: Record<string, any>;
-  goalType: 'APP_OPERATION' | 'SYSTEM_CONTROL' | 'MEDIA_PLAYBACK' | 'MESSAGING' | 'SEARCH' | 'GENERAL';
+  goalType: 'APP_OPERATION' | 'SYSTEM_CONTROL' | 'MEDIA_PLAYBACK' | 'MESSAGING' | 'SEARCH' | 'GENERAL' | 'CONVERSATIONAL';
   terminalConditionType: 'PACKAGE_ACTIVE' | 'SINGLE_ACTION_DONE' | 'TEXT_PRESENT' | 'MUTATION_CONFIRMED';
   expectedPackage?: string;
   clarificationPrompt?: string;
@@ -105,8 +105,23 @@ export class IntentValidationFilter {
       };
     }
 
-    // RULE 2: Media Playback
-    if (clean.includes('play') || clean.includes('song') || clean.includes('music') || clean.includes('video')) {
+    // RULE 1.5: Conversational Queries & Singing/Trivia Questions
+    const isQuestionOrSing = /^(can you|could you|sing|tell me|who|what|why|how|when|where|explain|joke|poem)\b/i.test(clean);
+    if (isQuestionOrSing && !clean.startsWith('open ') && !clean.startsWith('launch ') && !clean.startsWith('play ')) {
+      return {
+        intentClass: 'INFORMATION_SEEKING',
+        actionVerb: 'conversational_response',
+        parameters: { query: rawUtterance },
+        goalType: 'CONVERSATIONAL',
+        terminalConditionType: 'MUTATION_CONFIRMED',
+      };
+    }
+
+    // RULE 2: Media Playback (Explicit play command or media app request)
+    if (
+      clean.startsWith('play ') ||
+      (clean.includes('play') && (clean.includes('video') || clean.includes('song') || clean.includes('episode') || clean.includes('youtube') || clean.includes('music') || clean.includes('track')))
+    ) {
       return {
         intentClass: 'STATE_CHANGE',
         actionVerb: 'play_media',

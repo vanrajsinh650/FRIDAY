@@ -15,6 +15,7 @@ export interface UINode {
   };
   isClickable: boolean;
   isEditable: boolean;
+  isCheckable?: boolean;
   isScrollable: boolean;
   isVisible: boolean;
   packageName: string;

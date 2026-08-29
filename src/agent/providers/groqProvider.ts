@@ -78,7 +78,7 @@ export class GroqProvider implements ModelProvider {
 
     try {
       const toolDescriptions = tools
-        .map((t) => `- ${t.function.name}: ${t.function.description}`)
+        .map((t) => `- ${t.name || t.function?.name}: ${t.description || t.function?.description}`)
         .join('\n');
 
       const existingSystemPrompt = extractText(messages.find((m) => m.role === 'system')?.content);

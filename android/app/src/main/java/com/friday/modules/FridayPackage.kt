@@ -23,7 +23,8 @@ class FridayPackage : ReactPackage {
             TTSTurboModule(reactContext),
             FloatingOverlayTurboModule(reactContext),
             RootControlTurboModule(reactContext),
-            SchedulerTurboModule(reactContext)
+            SchedulerTurboModule(reactContext),
+            ScreenCaptureTurboModule(reactContext)
         )
     }
 

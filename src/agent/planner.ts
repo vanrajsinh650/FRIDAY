@@ -6,6 +6,7 @@ import { ResultRanker } from './perception/resultRanker';
 import { PromptBuilder } from './promptBuilder';
 import { ToolRegistry } from '../tools/registry';
 import { ToolVisibility } from './prompt/toolVisibility';
+import { GroundingEngine } from './perception/groundingEngine';
 
 // --- Search query extraction -------------------------------------------------
 // The command wrapper around a media request ("open youtube and play X",
@@ -154,17 +155,9 @@ export class Planner {
   private provider: ModelProvider;
 
   constructor(provider?: ModelProvider) {
-    // Default to the tiered router (Tier-0 fast-path → primary reasoner →
-    // fallbacks) built from settings. Tests can inject a provider directly.
     this.provider = provider || ProviderFactory.createDefault();
   }
 
-  // Choose which result to open. Ranks the visible result cards against the
-  // media query and taps the best match by node id; when no card clears a
-  // relevance bar (or the request named no specific title), falls back to the
-  // platform's own first result. Downstream branch logic keys on the
-  // 'click_first_result' tool name, so selection stays reasoned without
-  // disturbing the fullscreen / verification flow.
   private buildResultClick(snapshot: AgentContextSnapshot, rawGoal: string): PlannedAction {
     const query = extractMediaQuery(rawGoal || '');
     const best = ResultRanker.pickBestResult(snapshot.screenTree, query);
@@ -191,10 +184,7 @@ export class Planner {
     const lastAction = actionCount > 0 ? task!.actionHistory[actionCount - 1] : null;
     const lowerGoal = (task?.rawGoal || '').toLowerCase();
 
-    // --- Fast-Path Heuristics for Goal Completion ---
-
-    // 1. Pure App Launch Goal (ONLY when there's no secondary action like play/search/send)
-    //    "open youtube" = yes, "open youtube and play video" = NO (that's MEDIA_PLAYBACK)
+    // 1. Pure App Launch Fast-Path
     if (task?.goalType === 'APP_OPERATION') {
       if (actionCount === 0) {
         const appToOpen = (
@@ -220,7 +210,7 @@ export class Planner {
       }
     }
 
-    // 2. System Control & Queries (Torch, Volume, Time, Battery, Alarms, Notifications)
+    // 2. Hardware / Quick Toggles Fast-Path
     if (task?.goalType === 'SYSTEM_CONTROL' && actionCount >= 1) {
       return {
         id: `step_${Date.now()}`,
@@ -234,12 +224,6 @@ export class Planner {
     if (task?.goalType === 'MEDIA_PLAYBACK') {
       const inYouTube = currentPkg.includes('youtube');
 
-      // Step A: Launch YouTube — but launch it exactly ONCE. If we already
-      // launched and the screen still doesn't read as YouTube, the app is
-      // either still cold-starting or momentarily unreadable. Relaunching just
-      // reopens YouTube over and over (the "opened YouTube many times" bug), so
-      // we wait a couple of settle cycles instead, then stop so the honesty
-      // gate reports the truth rather than spamming launches.
       if (!inYouTube) {
         const history = task.actionHistory;
         const launchCount = history.filter((a) => a.toolName === 'launch_app').length;
@@ -270,7 +254,6 @@ export class Planner {
 
       const isFullScreenRequested = lowerGoal.includes('full screen') || lowerGoal.includes('fullscreen');
 
-      // If full screen was already executed, we're done
       if (lastAction?.toolName === 'enter_fullscreen') {
         return {
           id: `step_${Date.now()}`,
@@ -280,14 +263,6 @@ export class Planner {
         };
       }
 
-      // If we just clicked the first video:
-      // Post-click verification phase: once we've tapped a result we must NOT
-      // self-declare success. Clicking is not proof of playback — an ad, a load
-      // error, or a mis-tap all look identical at click time. Give playback a
-      // bounded chance to surface real evidence (the loop's terminal check
-      // verifies on audio/transport controls); if it never does, stop producing
-      // progress so the honesty gate reports the truth instead of falsely
-      // claiming the video started.
       const clickedResult = task.actionHistory.some((a) => a.toolName === 'click_first_result');
       if (clickedResult) {
         if (isFullScreenRequested && lastAction?.toolName !== 'enter_fullscreen') {
@@ -327,8 +302,6 @@ export class Planner {
             description: 'Wait for the player transport controls to confirm playback',
           };
         }
-        // Exhausted verification without evidence — one final honest check, then
-        // let the loop wind down to the truthful "couldn't confirm" report.
         return {
           id: `step_${Date.now()}`,
           toolName: 'verify_playback_active',
@@ -337,17 +310,13 @@ export class Planner {
         };
       }
 
-      // If search was submitted, click the best-matching result (ranked over the
-      // visible list rather than blindly taking the first card).
       if (lastAction?.toolName === 'press_enter') {
         return this.buildResultClick(snapshot, task.rawGoal);
       }
 
-      // Extract the search query (empty = no specific title named, just play first)
       const songQuery = extractMediaQuery(task?.rawGoal || '');
       const isGenericPlay = songQuery.length === 0;
 
-      // If specific search query exists, perform search workflow
       if (!isGenericPlay && songQuery.length > 1) {
         const editableBox = snapshot.screenTree.nodes.find((n) => n.isEditable);
         const searchBox =
@@ -356,7 +325,6 @@ export class Planner {
             const desc = (n.contentDescription || '').toLowerCase();
             const text = (n.text || '').toLowerCase();
             const id = (n.id || '').toLowerCase();
-            // Strictly exclude YouTube Voice Search mic button
             if (desc.includes('voice') || desc.includes('mic') || desc.includes('speak') || text.includes('voice') || text.includes('mic')) {
               return false;
             }
@@ -391,8 +359,6 @@ export class Planner {
         }
       }
 
-      // Fallback: no search box found — rank whatever results are visible and
-      // open the best match (or the first card when nothing ranks confidently).
       return this.buildResultClick(snapshot, task?.rawGoal || '');
     }
 
@@ -400,8 +366,6 @@ export class Planner {
     if (task?.goalType === 'MESSAGING') {
       const inWhatsApp = currentPkg.includes('whatsapp');
 
-      // Launch WhatsApp exactly ONCE, then wait for it to settle rather than
-      // relaunching every step when the screen isn't yet readable as WhatsApp.
       if (!inWhatsApp) {
         const history = task.actionHistory;
         const launchCount = history.filter((a) => a.toolName === 'launch_app').length;
@@ -430,19 +394,11 @@ export class Planner {
         };
       }
 
-      // Check if send button is visible in composer
       const { contact, message } = extractMessageIntent(task.rawGoal);
       const nodes = snapshot.screenTree.nodes;
       const nodeLabel = (n: { contentDescription?: string; text?: string }) =>
         `${n.contentDescription || ''} ${n.text || ''}`;
 
-      // --- Post-send verification gate (honesty) ---------------------------
-      // Clicking Send is NOT proof of delivery — a mis-tap, a crash, or a
-      // pending network all look identical at click time. After a send, demand
-      // real evidence (the outgoing bubble / delivered marker, checked by the
-      // terminal condition) before we ever claim success. This mirrors the
-      // playback-verification gate and never returns 'none', so if the message
-      // never lands the loop winds down to the truthful "couldn't confirm".
       let lastSendIdx = -1;
       for (let i = task.actionHistory.length - 1; i >= 0; i--) {
         if (task.actionHistory[i].toolName === 'click_send_button') {
@@ -479,7 +435,6 @@ export class Planner {
         };
       }
 
-      // --- Inside the conversation (composer visible) ----------------------
       const composer = nodes.find(
         (n) => n.isEditable && /message/i.test(nodeLabel(n)) && !/search/i.test(nodeLabel(n))
       );
@@ -503,9 +458,7 @@ export class Planner {
             description: `Type the message: "${message}"`,
           };
         }
-        // No message text parsed — defer to the reasoner rather than guess.
       } else if (contact.length > 0) {
-        // --- Chat list → search for and open the target conversation -------
         const searchBox =
           nodes.find((n) => n.isEditable) ||
           nodes.find((n) => /search/i.test(nodeLabel(n)));
@@ -540,9 +493,6 @@ export class Planner {
     }
 
     // --- High-Intelligence LLM Reasoning (tiered router) ---
-    // Tier-0 deterministic intents live inside the router. Here we build the
-    // tree-based prompt and, when the tree is too sparse to act on, escalate to
-    // an on-demand screenshot for a vision model — never on every step.
     const messages = PromptBuilder.buildSystemPrompt(snapshot);
     const tools = ToolVisibility.getScopedTools(snapshot.goalType, snapshot.screenTree.activePackage);
     const perceived = await VisionPerception.augment(messages, snapshot);
@@ -562,3 +512,4 @@ export class Planner {
     return [nextAction];
   }
 }
+

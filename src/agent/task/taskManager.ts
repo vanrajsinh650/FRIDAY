@@ -12,49 +12,29 @@ class TaskManagerClass {
     let goalType: GoalType = 'APP_OPERATION';
     const terminalConditions: TerminalCondition[] = [];
 
-    // 1. Pure Navigation (e.g. "go in WhatsApp", "open YouTube", "launch Camera")
-    if (validated.intentClass === 'NAVIGATION') {
+    // 1. Conversational Queries & Questions (e.g. "Can you sing my song?", "What is...", "Tell me...")
+    const isQuestionOrChat = /^(can you|could you|sing|tell me|who|what|why|how|when|where|explain|joke|poem)\b/i.test(lower);
+    if (isQuestionOrChat && !lower.startsWith('open ') && !lower.startsWith('launch ')) {
+      goalType = 'CONVERSATIONAL';
+      terminalConditions.push({
+        type: 'SINGLE_ACTION_DONE',
+        description: 'Conversational response formulated',
+      });
+    } else if (
+      validated.intentClass === 'NAVIGATION' ||
+      ((lower.startsWith('open ') || lower.startsWith('launch ') || lower.startsWith('khol ') || lower.startsWith('chalu ')) &&
+        !lower.includes(' and ') &&
+        !lower.includes(' to ') &&
+        !lower.includes('search') &&
+        !lower.includes('play') &&
+        !lower.includes('send') &&
+        !lower.includes('message'))
+    ) {
       goalType = 'APP_OPERATION';
       terminalConditions.push({
         type: 'PACKAGE_ACTIVE',
         expectedPackage: targetApp,
         description: 'Application successfully opened in foreground',
-      });
-    } else if (
-      validated.goalType === 'MEDIA_PLAYBACK' ||
-      lower.includes('play ') ||
-      lower.includes('song') ||
-      lower.includes('video') ||
-      lower.includes('gaana') ||
-      lower.includes('taarak mehta') ||
-      lower.includes('episode')
-    ) {
-      goalType = 'MEDIA_PLAYBACK';
-      terminalConditions.push({
-        type: 'PLAYBACK_ACTIVE',
-        expectedPackage: 'com.google.android.youtube',
-        description: 'YouTube video selected, opened, and playback verified',
-      });
-    } else if (
-      validated.goalType === 'MESSAGING' ||
-      ((lower.includes('send ') || lower.includes('message') || lower.includes('msg') || lower.includes('sms') || lower.includes('bhej')) &&
-        (lower.includes('to ') || lower.includes('that ') || lower.includes('saying ')))
-    ) {
-      goalType = 'MESSAGING';
-      terminalConditions.push({
-        type: 'MESSAGE_SENT',
-        expectedPackage: targetApp || 'com.whatsapp',
-        description: 'Conversation opened, message typed, Send clicked, and sent state verified',
-      });
-    } else if (
-      lower.startsWith('search ') ||
-      lower.startsWith('find ') ||
-      lower.includes('google ')
-    ) {
-      goalType = 'SEARCH';
-      terminalConditions.push({
-        type: 'TEXT_PRESENT',
-        description: 'Search results loaded and displayed',
       });
     } else if (
       lower.includes('torch') ||
@@ -86,22 +66,37 @@ class TaskManagerClass {
         description: 'Hardware or system state modified',
       });
     } else if (
-      lower.startsWith('open ') ||
-      lower.startsWith('launch ') ||
-      lower.startsWith('khol') ||
-      lower.startsWith('chalu')
+      validated.goalType === 'MEDIA_PLAYBACK' ||
+      lower.startsWith('play ') ||
+      (lower.includes('play') && (lower.includes('video') || lower.includes('episode') || lower.includes('song') || lower.includes('youtube') || lower.includes('music')))
     ) {
-      goalType = 'APP_OPERATION';
+      goalType = 'MEDIA_PLAYBACK';
       terminalConditions.push({
-        type: 'PACKAGE_ACTIVE',
+        type: 'PLAYBACK_ACTIVE',
         expectedPackage: targetApp,
-        description: 'Application successfully opened in foreground',
+        description: 'Media playback initiated and active',
+      });
+    } else if (
+      validated.goalType === 'MESSAGING' ||
+      ((lower.startsWith('send ') || lower.startsWith('message ') || lower.startsWith('text ')) && (lower.includes('to ') || lower.includes('that ')))
+    ) {
+      goalType = 'MESSAGING';
+      terminalConditions.push({
+        type: 'MESSAGE_SENT',
+        expectedPackage: targetApp,
+        description: 'Message typed and sent',
+      });
+    } else if (lower.startsWith('search ') || lower.startsWith('find ') || lower.includes('google ')) {
+      goalType = 'SEARCH';
+      terminalConditions.push({
+        type: 'TEXT_PRESENT',
+        description: 'Search results loaded and displayed',
       });
     } else {
-      goalType = 'CONVERSATIONAL';
+      goalType = 'APP_OPERATION';
       terminalConditions.push({
         type: 'SINGLE_ACTION_DONE',
-        description: 'Conversational reply formulated',
+        description: 'Autonomous action executed',
       });
     }
 
@@ -209,8 +204,8 @@ class TaskManagerClass {
       }
 
       if (condition.type === 'PLAYBACK_ACTIVE') {
-        // Can NEVER be completed just by launching the app!
-        if (lastTool === 'launch_app' || !lastTool) {
+        // Can NEVER be completed just by launching the app or searching/typing!
+        if (lastTool === 'launch_app' || lastTool === 'click_node' || lastTool === 'type_text' || lastTool === 'press_enter' || !lastTool) {
           continue;
         }
 

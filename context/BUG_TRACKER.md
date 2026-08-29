@@ -30,6 +30,7 @@
 | BUG-015 | Native Accessibility Binder handle leak & double-recycle crash | P0 | Verified | `android/accessibility/FridayAccessibilityService.kt` | Early returns without recycling AccessibilityNodeInfo; double recycle when focused === root | Wrapped in try/finally recycling blocks with object identity checks before recycling |
 | BUG-016 | 900 anim/sec rAF animation storm on JS thread | P1 | Verified | `src/components/VoiceWaveform.tsx` | Spawning 15 Animated.timing instances inside 60fps requestAnimationFrame loop | Used direct Animated.Value.setValue() in rAF loop without allocating timing objects |
 | BUG-021 | Privileged IPC stream deadlocks, shell command injection & Shizuku lifecycle risks | P0 | Verified | `android/modules/RootControlTurboModule.kt`, `src/native/RootControlModule.ts`, `src/tools/rootControlTools.ts`, `AndroidManifest.xml` | Sequential stream reading blocked on OS pipe buffer; unvalidated package/permission shell interpolation; missing Shizuku permission; un-sanitized newlines | Implemented concurrent stream draining, finally process cleanup, strict regex validation for packages & permissions, control char sanitization, AndroidManifest API_V23 permission, and fallback error propagation |
+| BUG-022 | Autonomous loop regression & deprecated NVIDIA model 410 Gone error | P0 | Verified | `src/agent/loop/agentLoop.ts`, `src/agent/planner.ts`, `src/agent/agent.ts`, `src/state/settingsStore.ts` | Agent loop diverted tasks into un-mocked experimental reasoner; Tier-0 offline intents removed; YouTube & WhatsApp multi-step flows stripped; NVIDIA llama-3.1-8b sunset on 2026-08-26 | Restored standard AgentLoop and complete deterministic Planner flows; restored Tier-0 offline intents in agent.ts and router; updated default model to meta/llama-3.3-70b-instruct; 177/177 tests green |
 
 ---
 
@@ -175,3 +176,26 @@
   - Added 30-second watchdog and `Shizuku.OnBinderDeadListener` in `requestShizukuPermission`.
   - Enhanced `StepExecutor` error propagation when elevated fallback fails.
   - Comprehensive unit and edge-case test suite (`rootControl.test.ts`) covering all 177 tests green.
+
+### [BUG-022] Autonomous Loop Regression & Deprecated NVIDIA Model (HTTP 410 Gone)
+
+- **Severity:** P0 (Agent Loop Hijack & Model EOL Failure)
+- **Status:** Verified
+- **Component:** `src/agent/loop/agentLoop.ts`, `src/agent/planner.ts`, `src/agent/agent.ts`, `src/state/settingsStore.ts`, `src/agent/providers/providerRouter.ts`
+- **Reproduction Steps:**
+  1. Ask "Open YouTube and search Taarak Mehta funny episode and play it" or "wake up" or "who are you".
+  2. Agent fails, returns empty array of steps, or throws NVIDIA 410 Gone / Groq 429 rate limit errors.
+- **Expected Behavior:** Multi-step YouTube playback, WhatsApp messaging, offline wake-word recognition, and persona queries execute seamlessly with deterministic planning and active LLM fallback.
+- **Actual Behavior:** Tasks were intercepted by an experimental reasoner making un-mocked raw LLM calls; Tier-0 intent fast-path was missing from `agent.ts`; `planner.ts` flows were stripped; NVIDIA's `meta/llama-3.1-8b-instruct` was sunset on 2026-08-26 returning HTTP 410.
+- **Root Cause Analysis:**
+  1. `agentLoop.ts` diverted all non-system control tasks into an experimental `AutonomousMobileReasoner` that attempted un-throttled ReAct calls.
+  2. `resolveIntent` was removed from `FridayAgent.executeGoal`, preventing offline greetings and persona answers.
+  3. `Planner.ts` lost its deterministic `MEDIA_PLAYBACK`, `MESSAGING`, and `ResultRanker` flows.
+  4. NVIDIA API deprecated `meta/llama-3.1-8b-instruct`.
+- **Fix & Regression Test:**
+  - Restored `AgentLoop.run` with proper step execution, animation settle delays, and outcome verification.
+  - Restored deterministic YouTube playback, WhatsApp messaging, and `ResultRanker` heuristics in `Planner.ts`.
+  - Re-enabled Tier-0 `resolveIntent` fast-paths in `FridayAgent.executeGoal` and `ProviderRouter`.
+  - Updated default NVIDIA model to `meta/llama-3.3-70b-instruct`.
+  - Cleaned up unused experimental files.
+  - Verified 100% green test suite across all 11 suites and 177 tests.

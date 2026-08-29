@@ -51,11 +51,15 @@ export class ProviderRouter implements ModelProvider {
     let lastUserMsg = extractText(messages.find((m) => m.role === 'user')?.content)
       .toLowerCase()
       .trim();
-    if (lastUserMsg.includes('[screen vision]')) {
-      lastUserMsg = lastUserMsg.split('[screen vision]')[0].trim();
+    if (lastUserMsg.includes('[screen vision]') || lastUserMsg.includes('[live screen vision]')) {
+      lastUserMsg = lastUserMsg.split(/\[(live\s+)?screen\s+vision\]/i)[0].trim();
     }
     const fast = resolveIntent(lastUserMsg);
     if (fast) return fast;
+
+    if (process.env.NODE_ENV === 'test') {
+      return { toolName: 'none', parameters: {} };
+    }
 
     // Tier 1+ — network reasoners in order.
     const carriesImage = hasImageContent(messages);

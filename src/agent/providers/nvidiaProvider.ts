@@ -63,6 +63,18 @@ export class NvidiaProvider implements ModelProvider {
     // A hard failure (no network, non-2xx, unparseable body) THROWS so the
     // router can fall back to the next reasoner. Returning a sentinel here would
     // silently swallow NVIDIA being down and strand the user on a dead primary.
+    const formattedTools = (tools || []).map((t) => {
+      if (t.type === 'function' && t.function) return t;
+      return {
+        type: 'function',
+        function: {
+          name: t.name || t.function?.name,
+          description: t.description || t.function?.description,
+          parameters: t.parameters || t.function?.parameters || { type: 'object', properties: {} },
+        },
+      };
+    });
+
     const response = await fetchWithTimeout(
       this.baseUrl,
       {
@@ -74,7 +86,7 @@ export class NvidiaProvider implements ModelProvider {
         body: JSON.stringify({
           model: this.modelFor(messages),
           messages: messages.map((m) => ({ role: m.role, content: m.content })),
-          tools,
+          tools: formattedTools,
           tool_choice: 'auto',
           temperature: 0.1,
           max_tokens: 300,

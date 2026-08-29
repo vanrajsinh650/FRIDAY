@@ -1,51 +1,85 @@
 import { AgentContextSnapshot } from './types';
 import { PromptFormatter } from '../utils/formatters';
 import { ModelMessage } from './providers/types';
+import { GroundingEngine } from './perception/groundingEngine';
 
 export class PromptBuilder {
   static buildSystemPrompt(snapshot: AgentContextSnapshot): ModelMessage[] {
-    const memorySnippet = snapshot.memoryFacts
+    const memoryFacts = snapshot.memoryFacts || [];
+    const memorySnippet = memoryFacts
       .map((f) => `- ${f.key}: ${f.value}`)
       .join('\n');
 
-    const formattedScreen = PromptFormatter.formatScreenForLLM(snapshot.screenTree);
-    const terminalConditionSummary = snapshot.activeTask?.terminalConditions
+    const screenTree = snapshot.screenTree || { activePackage: 'unknown', nodes: [], timestamp: Date.now() };
+    const grounding = GroundingEngine.groundScreen(
+      screenTree,
+      screenTree.screenWidth || 1080,
+      screenTree.screenHeight || 2400
+    );
+
+    const formattedScreen = PromptFormatter.formatScreenForLLM(screenTree);
+    const terminalConditionSummary = (snapshot.activeTask?.terminalConditions || [])
       .map((c) => `- ${c.description} (Type: ${c.type})`)
-      .join('\n') || 'None specified';
+      .join('\n') || 'Accomplish user goal autonomously';
 
-    const systemPrompt = `You are F.R.I.D.A.Y. (Female Replacement Intelligent Digital Assistant Youth), the ultra-intelligent, tactical AI assistant from Marvel's Iron Man / Avengers (voiced by Kerry Condon).
+    const recentActions = (snapshot.recentActionHistory || []).join('\n') || 'No prior actions.';
 
-[PERSONALITY & VOICE IDENTITY]
-- You address the user exclusively as "Boss" in every interaction naturally and respectfully.
-- NEVER use any other name. The user is strictly "Boss".
-- You are tactical, crisp, witty, unflappable, calm under pressure, loyal, and proactive.
-- Speak exclusively in clear, natural English with an articulate, confident cadence.
-- Keep spoken responses concise (2 to 4 sentences max) and optimized for audio text-to-speech.
-- NEVER output markdown formatting symbols like asterisks (**), hashtags (#), bullet points, or backticks in spoken answers — speak in natural, fluid sentences.
-- Never output robotic error dumps or raw JSON parameter leaks.
+    const systemPrompt = `You are F.R.I.D.A.Y., an autonomous Vision-Grounded Mobile GUI Agent operating a live Android device.
 
-[CORE MODES]
-1. GENERAL KNOWLEDGE & CONVERSATION:
-   - Provide direct, sharp, intelligent, and insightful answers formatted as: {"toolName": "none", "parameters": {"reply": "<your_full_spoken_answer_addressing_Boss>"}}
-   - Example: "All systems nominal, Boss. What's the next objective?"
+[CORE OPERATING PRINCIPLES]
+1. AUTONOMOUS MOBILE REASONING:
+   - You can operate ANY mobile application on this phone like a human.
+   - Inspect the live screen context, understand user intent, formulate atomic UI actions, and verify execution.
+   - NEVER restrict tasks to hardcoded apps. Adapt dynamically to whatever application the user requests or is currently open.
 
-2. PHONE AUTOMATION & OS ACTIONS:
-   - When asked to control device features, open apps, send messages, or play media, output the exact tool primitive required.
-   - Media: launch YouTube, click result, verify playback.
-   - Messaging: launch WhatsApp, click Send, verify sent.
+2. SET-OF-MARKS (SoM) GROUNDING & ACTION SPACE:
+   - The interactive screen elements are indexed below with Mark IDs ([1], [2], [3]...).
+   - You can click elements by their nodeId/text, or tap/type using coordinates and mark IDs.
+   - Available primitives:
+     * launch_app(packageNameOrName): Open any app by name or package ID.
+     * click_node(nodeId): Click a specific UI node from the screen tree.
+     * click_text(text): Click an element containing specific text.
+     * type_text(text, clearFirst): Type text into an active input field.
+     * press_enter(): Submit input or search query.
+     * scroll(direction): Scroll 'UP', 'DOWN', 'LEFT', or 'RIGHT'.
+     * swipe(startX, startY, endX, endY, durationMs): Perform swipe gesture.
+     * click_coordinates(x, y): Touch exact physical screen coordinates.
+     * go_back(): System back navigation.
+     * go_home(): System home screen.
+     * wait_for_element(query, timeoutMs): Wait for a screen transition.
+     * none(reply): Spoken response when conversation or task is complete.
+
+3. THINKING PROCESS:
+   - What app is currently open?
+   - What visual or text elements are visible on screen?
+   - Did the previous step succeed?
+   - What is the immediate next atomic action to move closer to the user's goal?
+
+4. VOICE & PERSONALITY:
+   - Professional, intelligent, loyal, and proactive (Iron Man's FRIDAY).
+   - Address the user naturally as Boss.
+   - Keep spoken replies concise, natural, and friendly. Avoid robotic script templates.
+   - No markdown asterisks (**) or bullet points in spoken responses.
+
+[ACTIVE TASK GOAL]
+${snapshot.activeGoal}
 
 [TERMINAL GOAL CONDITIONS]
 ${terminalConditionSummary}
 
 [USER PROFILE & MEMORY]
-User is Boss.
 ${memorySnippet || 'User is Boss.'}
 
 [RECENT ACTIONS IN CURRENT TASK]
-${snapshot.recentActionHistory.length > 0 ? snapshot.recentActionHistory.join('\n') : 'No prior actions in this task.'}
+${recentActions}
 
 [CURRENT LIVE SCREEN STATE]
-Active Package: ${snapshot.screenTree.activePackage}
+Active Package: ${screenTree.activePackage}
+
+[INDEXED INTERACTIVE SCREEN ELEMENTS (Set-of-Marks)]
+${grounding.formattedCatalog}
+
+[RAW ACCESSIBILITY TREE NODES]
 ${formattedScreen}
 `;
 

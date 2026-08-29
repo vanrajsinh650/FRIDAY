@@ -121,6 +121,48 @@ class FridayAccessibilityService : AccessibilityService() {
         return false
     }
 
+    fun triggerCameraShutter(): Boolean {
+        val root = rootInActiveWindow
+        if (root != null) {
+            val shutterKeywords = listOf("shutter", "take picture", "take photo", "capture", "camera", "photo", "snapshot")
+            for (kw in shutterKeywords) {
+                val node = findNodeByTextOrDesc(root, kw, false)
+                if (node != null) {
+                    var target: AccessibilityNodeInfo? = node
+                    while (target != null && !target.isClickable) {
+                        target = target.parent
+                    }
+                    if (target != null && target.isClickable) {
+                        val ok = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                        root.recycle()
+                        return ok
+                    }
+                    val bounds = Rect()
+                    node.getBoundsInScreen(bounds)
+                    node.recycle()
+                    root.recycle()
+                    if (bounds.width() > 0 && bounds.height() > 0) {
+                        CoroutineScope(Dispatchers.Main).launch {
+                            GestureDispatcher.click(this@FridayAccessibilityService, bounds.centerX().toFloat(), bounds.centerY().toFloat())
+                        }
+                        return true
+                    }
+                }
+            }
+            root.recycle()
+        }
+
+        // Universal Android camera shutter fallback: tap bottom-center shutter zone
+        val displayMetrics = resources.displayMetrics
+        val centerX = displayMetrics.widthPixels / 2f
+        val centerY = displayMetrics.heightPixels - (displayMetrics.density * 100f)
+
+        CoroutineScope(Dispatchers.Main).launch {
+            GestureDispatcher.click(this@FridayAccessibilityService, centerX, centerY)
+        }
+        return true
+    }
+
     private fun findNodeByTextOrDesc(node: AccessibilityNodeInfo, query: String, matchExact: Boolean): AccessibilityNodeInfo? {
         val text = node.text?.toString()?.lowercase()
         val desc = node.contentDescription?.toString()?.lowercase()
@@ -173,15 +215,7 @@ class FridayAccessibilityService : AccessibilityService() {
             }
         }
         root.recycle()
-
-        // Fallback to tapping center of first video card thumbnail (Y = 32% of screen height)
-        val metrics = resources.displayMetrics
-        val targetX = metrics.widthPixels / 2f
-        val targetY = metrics.heightPixels * 0.32f
-        CoroutineScope(Dispatchers.Main).launch {
-            GestureDispatcher.click(this@FridayAccessibilityService, targetX, targetY)
-        }
-        return true
+        return false
     }
 
     private fun findFirstCardContainer(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
@@ -197,12 +231,11 @@ class FridayAccessibilityService : AccessibilityService() {
             return null
         }
 
-        // Look for video elements or large clickable content cards in YouTube
-        val isVideoLike = desc.contains("play") || desc.contains("video") || desc.contains("ago") || desc.contains("views") ||
-                text.contains("views") || desc.contains("watch") || id.contains("thumbnail") || id.contains("video_title")
+        val isCardLike = desc.contains("play") || desc.contains("video") || desc.contains("item") || desc.contains("card") ||
+                text.length > 3 || node.isClickable
 
-        if (bounds.top > 180 && bounds.top < 1800 && bounds.height() > 100 && bounds.width() > 250) {
-            if (node.isClickable || isVideoLike) {
+        if (bounds.top > 150 && bounds.top < 2200 && bounds.height() > 80 && bounds.width() > 200) {
+            if (node.isClickable || isCardLike) {
                 return node
             }
         }
@@ -240,21 +273,7 @@ class FridayAccessibilityService : AccessibilityService() {
             }
         }
         root.recycle()
-
-        // Fallback coordinate click for YouTube fullscreen icon:
-        // First tap video player to ensure controls are visible (X = 50%, Y = 22%)
-        // Then tap bottom-right of video player area (X = 93%, Y = 28%)
-        val metrics = resources.displayMetrics
-        val playerX = metrics.widthPixels * 0.5f
-        val playerY = metrics.heightPixels * 0.22f
-        val fsX = metrics.widthPixels * 0.93f
-        val fsY = metrics.heightPixels * 0.28f
-        CoroutineScope(Dispatchers.Main).launch {
-            GestureDispatcher.click(this@FridayAccessibilityService, playerX, playerY)
-            kotlinx.coroutines.delay(400)
-            GestureDispatcher.click(this@FridayAccessibilityService, fsX, fsY)
-        }
-        return true
+        return false
     }
 
     fun clickSendOrActionButton(): Boolean {
@@ -282,15 +301,7 @@ class FridayAccessibilityService : AccessibilityService() {
             }
         }
         root.recycle()
-
-        // Fallback coordinate click for Send button in WhatsApp/Telegram/Messages (bottom right above keyboard / bottom right corner)
-        val metrics = resources.displayMetrics
-        val sendX = metrics.widthPixels - 80f
-        val sendY = metrics.heightPixels - 140f
-        CoroutineScope(Dispatchers.Main).launch {
-            GestureDispatcher.click(this@FridayAccessibilityService, sendX, sendY)
-        }
-        return true
+        return false
     }
 
     fun pressEnterOrSearch(): Boolean {
@@ -310,14 +321,6 @@ class FridayAccessibilityService : AccessibilityService() {
             focused.recycle()
         }
         root.recycle()
-
-        // Tap bottom-right keyboard Enter/Search action area
-        val metrics = resources.displayMetrics
-        val enterX = metrics.widthPixels - 100f
-        val enterY = metrics.heightPixels - 120f
-        CoroutineScope(Dispatchers.Main).launch {
-            GestureDispatcher.click(this@FridayAccessibilityService, enterX, enterY)
-        }
-        return true
+        return false
     }
 }

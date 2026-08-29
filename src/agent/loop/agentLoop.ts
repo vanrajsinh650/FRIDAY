@@ -1,3 +1,5 @@
+// src/agent/loop/agentLoop.ts
+
 import { TaskState } from '../task/types';
 import { TaskManager } from '../task/taskManager';
 import { SessionManager } from '../session/sessionManager';
@@ -50,57 +52,25 @@ export class AgentLoop {
       SessionManager.updateScreenFingerprint(currentFingerprint);
       SessionManager.emitEvent('SCREEN_OBSERVED', { activePackage: snapshot.screenTree.activePackage, fingerprint: currentFingerprint });
 
-      // 2. PRE-ACTION CHECK: Only check terminal conditions AFTER at least 1 action executed
-      if (task.stepCount > 1 && lastExecutedTool) {
-        const isMediaPlaying = await SystemControlModule.isMediaPlaying();
-        if (TaskManager.isTerminalConditionMet(task, snapshot.screenTree, isMediaPlaying, lastExecutedTool)) {
-          task.verified = true;
-          task.status = 'COMPLETED';
-          SessionManager.emitEvent('VERIFICATION_PASSED', { taskId: task.id });
-          break;
-        }
-      }
-
-      // 3. REASON: Determine next primitive action
+      // 2. REASON
       const plannedAction = await this.planner.planNextAction(snapshot);
       SessionManager.emitEvent('AGENT_REASONED', { action: plannedAction.toolName, params: plannedAction.parameters });
- 
-      // Direct conversational answer
-      if (plannedAction.toolName === 'none' || plannedAction.toolName === 'speak_response') {
-        finalSpokenResponse =
-          plannedAction.parameters?.reply ||
-          plannedAction.description ||
-          'All set, Boss.';
 
-        // If task had terminal conditions that were never met (e.g. searching/playing/messaging), don't rubber-stamp as verified!
-        if (task.stepCount > 0 && task.terminalConditions && task.terminalConditions.length > 0 && !task.terminalConditions.some((c) => c.type === 'SINGLE_ACTION_DONE')) {
-          const isMediaPlaying = await SystemControlModule.isMediaPlaying();
-          const verified = TaskManager.isTerminalConditionMet(task, snapshot.screenTree, isMediaPlaying, lastExecutedTool);
-          task.verified = verified;
-          task.status = verified ? 'COMPLETED' : 'FAILED';
-        } else {
-          task.verified = true;
-          task.status = 'COMPLETED';
+      if (plannedAction.toolName === 'none' || plannedAction.toolName === 'speak_response') {
+        if (task.actionHistory.length === 0) {
+          finalSpokenResponse =
+            plannedAction.parameters?.reply ||
+            plannedAction.description ||
+            'All set, Boss.';
         }
+        task.verified = true;
+        task.status = 'COMPLETED';
         break;
       }
 
-      // 4. ACT: Execute step
+      // 3. ACT
       useAgentStore.getState().setAgentState('EXECUTING');
-      let overlayStatus = plannedAction.description || `Executing ${plannedAction.toolName}...`;
-      if (plannedAction.toolName === 'launch_app') {
-        const app = plannedAction.parameters?.packageNameOrName || plannedAction.parameters?.packageName || 'app';
-        const cleanApp = app.replace('com.google.android.', '').replace('com.', '');
-        overlayStatus = `Opening ${cleanApp.charAt(0).toUpperCase() + cleanApp.slice(1)}...`;
-      } else if (plannedAction.toolName === 'click_first_result' || plannedAction.toolName === 'play_media') {
-        overlayStatus = 'Playing video...';
-      } else if (plannedAction.toolName === 'click_send_button') {
-        overlayStatus = 'Sending message...';
-      } else if (plannedAction.toolName === 'type_text') {
-        const txt = plannedAction.parameters?.text;
-        overlayStatus = txt ? `Typing "${txt.length > 20 ? txt.slice(0, 17) + '...' : txt}"...` : 'Typing...';
-      }
-      await FloatingOverlayModule.showOverlay(overlayStatus, 'EXECUTING');
+      await FloatingOverlayModule.showOverlay(plannedAction.description || `Executing ${plannedAction.toolName}...`, 'EXECUTING');
 
       const stepRecord = await StepExecutor.executeStep(plannedAction);
       lastExecutedTool = plannedAction.toolName;
@@ -113,7 +83,7 @@ export class AgentLoop {
         lastToolResultData = allSteps[allSteps.length - 1]?.result;
       }
 
-      // 5. STATE-AWARE WAIT: Allow animations to settle
+      // 4. STATE-AWARE WAIT: Allow animations to settle
       if (
         plannedAction.toolName === 'launch_app' ||
         plannedAction.toolName === 'click_first_result' ||
@@ -126,7 +96,7 @@ export class AgentLoop {
         await this.sleep(300);
       }
 
-      // 6. POST-ACTION OBSERVATION & FINGERPRINT COMPARISON
+      // 5. POST-ACTION OBSERVATION & FINGERPRINT COMPARISON
       useAgentStore.getState().setAgentState('VERIFYING');
       await FloatingOverlayModule.updateOverlay('Verifying action...', 'VERIFYING');
       const updatedScreen = await AccessibilityModule.inspectScreen();
@@ -143,7 +113,7 @@ export class AgentLoop {
         history.push(`Step ${task.stepCount}: ${plannedAction.toolName} -> OK`);
       }
 
-      // 7. POST-ACTION TERMINAL CONDITION VERIFICATION
+      // 6. POST-ACTION TERMINAL CONDITION VERIFICATION
       const updatedIsPlaying = await SystemControlModule.isMediaPlaying();
       if (TaskManager.isTerminalConditionMet(task, updatedScreen, updatedIsPlaying, lastExecutedTool)) {
         task.verified = true;
@@ -153,7 +123,7 @@ export class AgentLoop {
       }
     }
 
-    // 8. SYNTHESIZE FINAL SPOKEN CONFIRMATION
+    // 7. SYNTHESIZE FINAL SPOKEN CONFIRMATION
     if (!finalSpokenResponse) {
       const lastAction = task.actionHistory[task.actionHistory.length - 1];
       const tool = lastAction?.toolName;

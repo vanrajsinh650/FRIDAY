@@ -1,7 +1,7 @@
 # FRIDAY — Living Project State
 
-> **Last Updated:** 2026-08-24  
-> **Current Phase:** Phase 8 — Autonomous Scheduled & Proactive Workflows Verified (ADR-008, ADR-017)  
+> **Last Updated:** 2026-08-29  
+> **Current Phase:** Phase 8 — Autonomous Scheduled & Proactive Workflows Verified (ADR-008, ADR-017, BUG-022)  
 > **Primary Tech Stack:** React Native (TypeScript) + Android Native Modules (Kotlin/Java) + FastAPI VPS Brain  
 
 ---

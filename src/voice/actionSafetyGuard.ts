@@ -114,9 +114,19 @@ export class ActionSafetyGuard {
       };
     }
 
-    // Action Verb + Target Pattern
-    const actionPattern = /\b(open|launch|start|play|send|message|text|search|turn on|turn off|enable|disable|toggle|set|clear|close|call|dial)\b/i;
+    // Action Verb + Target Pattern (covers apps, UI clicks, camera capture, toggles, gestures)
+    const actionPattern = /\b(open|launch|start|play|send|message|text|search|turn on|turn off|enable|disable|toggle|set|clear|close|call|dial|capture|take|click|tap|press|snap|shoot|record|scroll|swipe|type|kheecho|dabao|chalu|kholo|band)\b/i;
     if (actionPattern.test(normalized)) {
+      return { type: 'ACTIONABLE', cleanedText: text, wordCount: words.length };
+    }
+
+    // Direct camera & screen action queries (e.g. "capture", "capture image", "click capture button", "take photo")
+    if (/\b(capture|photo|picture|shutter|camera|image|screenshot|selfie)\b/i.test(normalized)) {
+      return { type: 'ACTIONABLE', cleanedText: text, wordCount: words.length };
+    }
+
+    // Any multi-word utterance that is not explicitly conversational should be evaluated as ACTIONABLE
+    if (words.length >= 2) {
       return { type: 'ACTIONABLE', cleanedText: text, wordCount: words.length };
     }
 

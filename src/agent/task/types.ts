@@ -26,6 +26,7 @@ export interface ActionRecord {
   id: string;
   toolName: string;
   parameters: Record<string, any>;
+  description?: string;
   success: boolean;
   durationMs: number;
   observedPackage?: string;
