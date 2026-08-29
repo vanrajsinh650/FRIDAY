@@ -87,6 +87,19 @@ class SystemControlTurboModule(private val reactContext: ReactApplicationContext
     }
 
     @ReactMethod
+    fun exitApp(promise: Promise) {
+        try {
+            FridayForegroundService.pauseWakeLoop()
+            FridayForegroundService.stopForegroundService(reactContext)
+            currentActivity?.finishAffinity()
+            android.os.Process.killProcess(android.os.Process.myPid())
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("EXIT_FAILED", e.message)
+        }
+    }
+
+    @ReactMethod
     fun getInstalledApps(promise: Promise) {
         CoroutineScope(Dispatchers.IO).launch {
             try {

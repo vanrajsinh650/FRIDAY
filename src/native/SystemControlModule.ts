@@ -20,6 +20,13 @@ export class SystemControlModule {
     return true;
   }
 
+  static async exitApplication(): Promise<boolean> {
+    if (FridaySystemControlNative?.exitApp) {
+      return await FridaySystemControlNative.exitApp();
+    }
+    return true;
+  }
+
   static async getBatteryStatus(): Promise<BatteryStatus> {
     if (FridaySystemControlNative?.getBatteryStatus) {
       return await FridaySystemControlNative.getBatteryStatus();

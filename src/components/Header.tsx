@@ -8,9 +8,10 @@ interface Props {
   onBack?: () => void;
   onNavigateSettings?: () => void;
   onNavigateTelemetry?: () => void;
+  onExitApp?: () => void;
 }
 
-export const Header: React.FC<Props> = ({ title, showBack, onBack, onNavigateSettings, onNavigateTelemetry }) => {
+export const Header: React.FC<Props> = ({ title, showBack, onBack, onNavigateSettings, onNavigateTelemetry, onExitApp }) => {
   return (
     <View style={styles.container}>
       <View style={styles.leftGroup}>
@@ -30,6 +31,11 @@ export const Header: React.FC<Props> = ({ title, showBack, onBack, onNavigateSet
         {onNavigateSettings && (
           <TouchableOpacity onPress={onNavigateSettings} style={styles.button}>
             <Text style={styles.buttonText}>⚙️</Text>
+          </TouchableOpacity>
+        )}
+        {onExitApp && (
+          <TouchableOpacity onPress={onExitApp} style={[styles.button, styles.exitButton]}>
+            <Text style={[styles.buttonText, styles.exitButtonText]}>⏻ CLOSE</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -86,6 +92,14 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: Colors.textPrimary,
-    fontSize: 13,
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  exitButton: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderColor: '#ef4444',
+  },
+  exitButtonText: {
+    color: '#ef4444',
   },
 });

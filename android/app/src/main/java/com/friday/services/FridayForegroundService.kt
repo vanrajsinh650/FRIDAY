@@ -95,9 +95,11 @@ class FridayForegroundService : Service() {
     private val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
     private val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
 
-    companion object {
         @Volatile
         var isFridaySpeaking: Boolean = false
+
+        @Volatile
+        var isAssistantGloballyEnabled: Boolean = true
 
         var instance: FridayForegroundService? = null
             private set
@@ -109,6 +111,7 @@ class FridayForegroundService : Service() {
         var openaiApiKey: String = ""
 
         fun ensureStarted(context: Context) {
+            if (!isAssistantGloballyEnabled) return
             try {
                 val intent = Intent(context, FridayForegroundService::class.java)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -119,7 +122,34 @@ class FridayForegroundService : Service() {
             } catch (_: Exception) {}
         }
 
+        fun stopForegroundService(context: Context) {
+            try {
+                isAssistantGloballyEnabled = false
+                instance?.let { s ->
+                    s.isServiceRunning = false
+                    s.stopActiveQueryListening()
+                    s.pauseWakeDetector()
+                    s.stopForeground(true)
+                    s.stopSelf()
+                }
+                val intent = Intent(context, FridayForegroundService::class.java)
+                context.stopService(intent)
+            } catch (_: Exception) {}
+        }
+
+        fun setGloballyEnabled(context: Context, enabled: Boolean) {
+            isAssistantGloballyEnabled = enabled
+            if (enabled) {
+                ensureStarted(context)
+                resumeWakeLoop()
+            } else {
+                pauseWakeLoop()
+                stopForegroundService(context)
+            }
+        }
+
         fun resumeWakeLoop() {
+            if (!isAssistantGloballyEnabled) return
             instance?.resumeWakeDetector()
         }
 
@@ -128,6 +158,7 @@ class FridayForegroundService : Service() {
         }
 
         fun startActiveQuery(language: String? = null) {
+            if (!isAssistantGloballyEnabled) return
             instance?.startActiveQueryListening(language)
         }
 

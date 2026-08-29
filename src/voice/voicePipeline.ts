@@ -19,12 +19,57 @@ const { FridaySpeechRecognizerNative } = NativeModules;
 
 export class VoicePipeline {
   private static isRunning = false;
+  private static isAssistantGloballyEnabled = true;
   private static stateMachine = new VoiceStateMachine();
   private static wakeWordSub: any = null;
   private static notifSub: any = null;
   private static appTriggerSub: any = null;
   private static lastHandledCommand = '';
   private static lastHandledTimestamp = 0;
+
+  static isEnabled(): boolean {
+    return this.isAssistantGloballyEnabled;
+  }
+
+  static async toggleAssistant(): Promise<boolean> {
+    const next = !this.isAssistantGloballyEnabled;
+    await this.setAssistantEnabled(next);
+    return next;
+  }
+
+  static async setAssistantEnabled(enabled: boolean): Promise<void> {
+    this.isAssistantGloballyEnabled = enabled;
+    useVoiceStore.getState().setAssistantEnabled(enabled);
+
+    if (!enabled) {
+      this.isRunning = false;
+      PocketTTSEngine.stop();
+      SpeechRecognizer.cancelListening();
+      AudioManager.forceStop();
+      try {
+        this.stateMachine.transition(VoiceSessionState.SLEEPING);
+      } catch (_e) {}
+      useAgentStore.getState().setAgentState('IDLE');
+      FloatingOverlayModule.updateOverlay('FRIDAY Offline', 'IDLE').catch(() => {});
+      if (FridaySpeechRecognizerNative?.stopContinuousWakeListening) {
+        FridaySpeechRecognizerNative.stopContinuousWakeListening().catch(() => {});
+      }
+      if (FridaySpeechRecognizerNative?.setAssistantEnabled) {
+        FridaySpeechRecognizerNative.setAssistantEnabled(false).catch(() => {});
+      }
+    } else {
+      try {
+        this.stateMachine.transition(VoiceSessionState.WAKE_LISTENING);
+      } catch (_e) {}
+      FloatingOverlayModule.updateOverlay('FRIDAY Standby', 'IDLE').catch(() => {});
+      if (FridaySpeechRecognizerNative?.setAssistantEnabled) {
+        FridaySpeechRecognizerNative.setAssistantEnabled(true).catch(() => {});
+      }
+      if (FridaySpeechRecognizerNative?.startContinuousWakeListening) {
+        FridaySpeechRecognizerNative.startContinuousWakeListening().catch(() => {});
+      }
+    }
+  }
 
   static initializeWakeWordListener(): void {
     if (this.wakeWordSub) return;
@@ -51,7 +96,7 @@ export class VoicePipeline {
     this.wakeWordSub = DeviceEventEmitter.addListener(
       'onWakeWordDetected',
       async (data: { wakeWord: string; command: string; fullText: string }) => {
-        if (this.isRunning) return;
+        if (!this.isAssistantGloballyEnabled || this.isRunning) return;
 
         const rawCmd = (data?.command || '').replace(/^[\s.,;:!?-]+|[\s.,;:!?-]+$/, '').trim();
         const hasAlphanumeric = /[a-zA-Z0-9]/.test(rawCmd);
@@ -106,7 +151,7 @@ export class VoicePipeline {
       this.appTriggerSub = DeviceEventEmitter.addListener(
         'onAppVoiceTrigger',
         async (data: { triggerVoice?: boolean; command?: string }) => {
-          if (this.isRunning) return;
+          if (!this.isAssistantGloballyEnabled || this.isRunning) return;
           await SystemControlModule.pauseMediaPlayback();
           const cmd = (data?.command || '').trim();
           const evaluation = ActionSafetyGuard.evaluate(cmd);
@@ -129,7 +174,7 @@ export class VoicePipeline {
       this.notifSub = DeviceEventEmitter.addListener(
         'onIncomingNotification',
         async (data: { spokenAlert: string; isMediaOrCallActive?: boolean }) => {
-          if (this.isRunning || !data?.spokenAlert || data?.isMediaOrCallActive) return;
+          if (!this.isAssistantGloballyEnabled || this.isRunning || !data?.spokenAlert || data?.isMediaOrCallActive) return;
 
           const isMedia = await SystemControlModule.isMediaPlaying();
           const inCall = await SystemControlModule.isCallActive();
@@ -142,13 +187,17 @@ export class VoicePipeline {
           } catch (_e) {
           } finally {
             this.isRunning = false;
-            FridaySpeechRecognizerNative?.startContinuousWakeListening?.();
+            if (this.isAssistantGloballyEnabled) {
+              FridaySpeechRecognizerNative?.startContinuousWakeListening?.();
+            }
           }
         }
       );
     }
 
-    FridaySpeechRecognizerNative?.startContinuousWakeListening?.();
+    if (this.isAssistantGloballyEnabled) {
+      FridaySpeechRecognizerNative?.startContinuousWakeListening?.();
+    }
   }
 
   /**
@@ -158,7 +207,7 @@ export class VoicePipeline {
    * speaks response, and immediately returns to 24/7 background standby (WAKE_LISTENING).
    */
   static async startVoiceSession(initialQuery?: string): Promise<void> {
-    if (this.isRunning) return;
+    if (!this.isAssistantGloballyEnabled || this.isRunning) return;
     this.isRunning = true;
 
     const agent = new FridayAgent();

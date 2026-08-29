@@ -34,6 +34,7 @@ export const AssistantScreen: React.FC<any> = ({ navigation }) => {
   const lastResponse = useAgentStore((s) => s.lastResponse);
   const errorMessage = useAgentStore((s) => s.errorMessage);
   const transcriptStream = useVoiceStore((s) => s.transcriptStream);
+  const isAssistantEnabled = useVoiceStore((s) => s.isAssistantEnabled);
 
   // Launcher state
   const [apps, setApps] = useState<InstalledApp[]>([]);
@@ -129,6 +130,7 @@ export const AssistantScreen: React.FC<any> = ({ navigation }) => {
         title="FRIDAY OS"
         onNavigateSettings={() => navigation.navigate('Settings')}
         onNavigateTelemetry={() => navigation.navigate('DebugTelemetry')}
+        onExitApp={() => SystemControlModule.exitApplication()}
       />
 
       {/* Cybernetic HUD Bar: Time, Battery, Launcher & Accessibility Status */}
@@ -142,7 +144,7 @@ export const AssistantScreen: React.FC<any> = ({ navigation }) => {
           {deviceStats && (
             <>
               <Text style={styles.statText}>
-                ? {deviceStats.batteryLevel}% {deviceStats.isCharging ? '(CHG)' : ''}
+                ⚡ {deviceStats.batteryLevel}% {deviceStats.isCharging ? '(CHG)' : ''}
               </Text>
               <Text style={styles.statTextDim}>
                 RAM: {Math.round(((deviceStats.totalRamMb - deviceStats.availRamMb) / deviceStats.totalRamMb) * 100)}% | Free: {deviceStats.freeStorageGb}GB
@@ -151,6 +153,37 @@ export const AssistantScreen: React.FC<any> = ({ navigation }) => {
           )}
         </View>
       </View>
+
+      {/* Master 24/7 Voice & Core Kill-Switch Button */}
+      <TouchableOpacity
+        style={[
+          styles.masterPowerBtn,
+          isAssistantEnabled ? styles.masterPowerActive : styles.masterPowerDisabled,
+        ]}
+        onPress={async () => {
+          await VoicePipeline.toggleAssistant();
+        }}
+        activeOpacity={0.8}
+      >
+        <View style={styles.masterPowerContent}>
+          <View style={[styles.masterPowerIndicator, isAssistantEnabled ? styles.indicatorActive : styles.indicatorDisabled]}>
+            <Text style={styles.masterPowerIcon}>{isAssistantEnabled ? '⚡' : '🛑'}</Text>
+          </View>
+          <View style={styles.masterPowerTextCol}>
+            <View style={styles.masterPowerTitleRow}>
+              <Text style={[styles.masterPowerTitle, isAssistantEnabled ? styles.textGreen : styles.textRed]}>
+                {isAssistantEnabled ? 'FRIDAY IS ONLINE (ACTIVE)' : 'FRIDAY IS MUTED (OFFLINE)'}
+              </Text>
+              <View style={[styles.statusDot, isAssistantEnabled ? styles.dotGreen : styles.dotRed]} />
+            </View>
+            <Text style={styles.masterPowerSub}>
+              {isAssistantEnabled
+                ? 'Listening 24/7 for "Friday". Tap here to fully mute & disable.'
+                : 'Fully silent & disabled. Tap here to power on & resume listening.'}
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
 
       {/* Quick Setup Alerts: Launcher, Assistant & Accessibility */}
       <View style={styles.badgesRow}>
@@ -383,6 +416,26 @@ export const AssistantScreen: React.FC<any> = ({ navigation }) => {
             >
               <Text style={styles.controlCardEmoji}>◀️</Text>
               <Text style={styles.controlCardTitle}>Back</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.controlCard, isAssistantEnabled ? styles.controlCardActive : styles.controlCardDanger]}
+              onPress={async () => {
+                await VoicePipeline.toggleAssistant();
+              }}
+            >
+              <Text style={styles.controlCardEmoji}>{isAssistantEnabled ? '⚡' : '🛑'}</Text>
+              <Text style={styles.controlCardTitle}>
+                {isAssistantEnabled ? 'Mute FRIDAY' : 'Power On FRIDAY'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.controlCard, styles.controlCardExit]}
+              onPress={() => SystemControlModule.exitApplication()}
+            >
+              <Text style={styles.controlCardEmoji}>⏻</Text>
+              <Text style={[styles.controlCardTitle, styles.textRed]}>Exit App</Text>
             </TouchableOpacity>
           </View>
 
@@ -731,6 +784,14 @@ const styles = StyleSheet.create({
     borderColor: Colors.hudCyan,
     backgroundColor: 'rgba(0, 229, 255, 0.1)',
   },
+  controlCardDanger: {
+    borderColor: 'rgba(239, 68, 68, 0.5)',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+  },
+  controlCardExit: {
+    borderColor: '#ef4444',
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+  },
   controlCardEmoji: {
     fontSize: 24,
     marginBottom: 6,
@@ -739,6 +800,104 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  masterPowerBtn: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 6,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  masterPowerActive: {
+    backgroundColor: 'rgba(0, 229, 255, 0.08)',
+    borderColor: Colors.hudCyan,
+    shadowColor: Colors.hudCyan,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  masterPowerDisabled: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderColor: '#ef4444',
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  masterPowerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  masterPowerIndicator: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  indicatorActive: {
+    backgroundColor: 'rgba(0, 229, 255, 0.2)',
+    borderWidth: 1,
+    borderColor: Colors.hudCyan,
+  },
+  indicatorDisabled: {
+    backgroundColor: 'rgba(239, 68, 68, 0.25)',
+    borderWidth: 1,
+    borderColor: '#ef4444',
+  },
+  masterPowerIcon: {
+    fontSize: 20,
+  },
+  masterPowerTextCol: {
+    flex: 1,
+  },
+  masterPowerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  masterPowerTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    letterSpacing: 0.8,
+  },
+  masterPowerSub: {
+    color: Colors.textDim,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  dotGreen: {
+    backgroundColor: '#10b981',
+    shadowColor: '#10b981',
+    shadowRadius: 4,
+    shadowOpacity: 1,
+  },
+  dotRed: {
+    backgroundColor: '#ef4444',
+    shadowColor: '#ef4444',
+    shadowRadius: 4,
+    shadowOpacity: 1,
+  },
+  textGreen: {
+    color: Colors.hudCyan,
+  },
+  textRed: {
+    color: '#ef4444',
+  },
+  iconGreen: {
+    color: Colors.hudCyan,
+  },
+  iconRed: {
+    color: '#ef4444',
   },
   volumeCard: {
     marginTop: 20,

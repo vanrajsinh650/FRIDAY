@@ -75,6 +75,19 @@ class SpeechRecognizerTurboModule(private val reactContext: ReactApplicationCont
     }
 
     @ReactMethod
+    fun stopContinuousWakeListening(promise: Promise) {
+        FridayForegroundService.pauseWakeLoop()
+        FridayForegroundService.stopForegroundService(reactContext)
+        promise.resolve(true)
+    }
+
+    @ReactMethod
+    fun setAssistantEnabled(enabled: Boolean, promise: Promise) {
+        FridayForegroundService.setGloballyEnabled(reactContext, enabled)
+        promise.resolve(true)
+    }
+
+    @ReactMethod
     fun stopListening(promise: Promise) {
         FridayForegroundService.stopActiveQuery()
         promise.resolve(true)
