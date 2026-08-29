@@ -29,6 +29,9 @@ import { ResponseShaper } from '../voice/responseShaper';
 import { useUpdateStore } from '../state/updateStore';
 import { InAppUpdateService } from '../services/InAppUpdateService';
 import { UpdateModal } from '../components/UpdateModal';
+import { useLauncherStore } from '../state/launcherStore';
+import { AppCategorizer, AppCategoryKey, APP_CATEGORIES } from '../utils/appCategorizer';
+import { AppActionModal } from '../components/AppActionModal';
 
 export const AssistantScreen: React.FC<any> = ({ navigation }) => {
   const agentState = useAgentStore((s) => s.state);
@@ -41,7 +44,15 @@ export const AssistantScreen: React.FC<any> = ({ navigation }) => {
   const updateStatus = useUpdateStore((s) => s.status);
   const latestVersion = useUpdateStore((s) => s.latestVersion);
 
-  // Launcher state
+  // Launcher state & customization store
+  const pinnedPackages = useLauncherStore((s) => s.pinnedPackages);
+  const hiddenPackages = useLauncherStore((s) => s.hiddenPackages);
+  const selectedCategory = useLauncherStore((s) => s.selectedCategory);
+  const layoutMode = useLauncherStore((s) => s.layoutMode);
+  const setSelectedCategory = useLauncherStore((s) => s.setSelectedCategory);
+  const setLayoutMode = useLauncherStore((s) => s.setLayoutMode);
+  const setSelectedAppForAction = useLauncherStore((s) => s.setSelectedAppForAction);
+
   const [apps, setApps] = useState<InstalledApp[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDefaultHome, setIsDefaultHome] = useState(false);
@@ -122,9 +133,20 @@ export const AssistantScreen: React.FC<any> = ({ navigation }) => {
     }
   };
 
-  const filteredApps = apps.filter((app) =>
-    app.appName.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const visibleApps = apps.filter((app) => !hiddenPackages.includes(app.packageName));
+
+  const pinnedApps = visibleApps.filter((app) => pinnedPackages.includes(app.packageName));
+  const quickDockApps = pinnedApps.length > 0 ? pinnedApps : visibleApps.slice(0, 5);
+
+  const categoryGroups = AppCategorizer.groupApps(apps, pinnedPackages, hiddenPackages);
+
+  const filteredApps = visibleApps.filter((app) => {
+    const matchesSearch = !searchQuery.trim() || app.appName.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!matchesSearch) return false;
+    if (selectedCategory === 'ALL') return true;
+    if (selectedCategory === 'FAVORITES') return pinnedPackages.includes(app.packageName);
+    return AppCategorizer.categorizeApp(app) === selectedCategory;
+  });
 
   const toggleTorch = async () => {
     const nextState = !torchOn;
@@ -329,13 +351,20 @@ export const AssistantScreen: React.FC<any> = ({ navigation }) => {
 
           {/* Favorite Quick Apps Dock */}
           <View style={styles.quickDockSection}>
-            <Text style={styles.dockTitle}>QUICK ACCESS</Text>
-            <View style={styles.dockRow}>
-              {apps.slice(0, 5).map((app) => (
+            <View style={styles.dockHeaderRow}>
+              <Text style={styles.dockTitle}>⭐ QUICK ACCESS DOCK</Text>
+              <TouchableOpacity onPress={() => setActiveTab('APPS')}>
+                <Text style={styles.dockManageText}>+ MANAGE APPS</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dockScrollContent}>
+              {quickDockApps.map((app) => (
                 <TouchableOpacity
                   key={app.packageName}
                   style={styles.dockItem}
                   onPress={() => SystemControlModule.launchApp(app.packageName)}
+                  onLongPress={() => setSelectedAppForAction(app)}
+                  activeOpacity={0.7}
                 >
                   {app.icon ? (
                     <Image source={{ uri: app.icon }} style={styles.dockIcon} />
@@ -347,29 +376,184 @@ export const AssistantScreen: React.FC<any> = ({ navigation }) => {
                   <Text numberOfLines={1} style={styles.dockLabel}>{app.appName}</Text>
                 </TouchableOpacity>
               ))}
-            </View>
+            </ScrollView>
           </View>
         </ScrollView>
       )}
 
-      {/* Tab 2: APPS GRID (Launcher Drawer) */}
+      {/* Tab 2: APPS MANAGEMENT & DRAWER */}
       {activeTab === 'APPS' && (
         <View style={styles.appsContainer}>
+          {/* Category Filter Chips Bar */}
+          <View style={styles.filterBarContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+              <TouchableOpacity
+                style={[styles.filterChip, selectedCategory === 'ALL' && styles.filterChipActive]}
+                onPress={() => setSelectedCategory('ALL')}
+              >
+                <Text style={[styles.filterChipText, selectedCategory === 'ALL' && styles.filterChipTextActive]}>
+                  ALL ({visibleApps.length})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.filterChip, selectedCategory === 'FAVORITES' && styles.filterChipActive]}
+                onPress={() => setSelectedCategory('FAVORITES')}
+              >
+                <Text style={[styles.filterChipText, selectedCategory === 'FAVORITES' && styles.filterChipTextActive]}>
+                  ⭐ PINNED ({pinnedApps.length})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.filterChip, selectedCategory === 'SOCIAL' && styles.filterChipActive]}
+                onPress={() => setSelectedCategory('SOCIAL')}
+              >
+                <Text style={[styles.filterChipText, selectedCategory === 'SOCIAL' && styles.filterChipTextActive]}>
+                  💬 SOCIAL
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.filterChip, selectedCategory === 'MEDIA' && styles.filterChipActive]}
+                onPress={() => setSelectedCategory('MEDIA')}
+              >
+                <Text style={[styles.filterChipText, selectedCategory === 'MEDIA' && styles.filterChipTextActive]}>
+                  🎬 MEDIA
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.filterChip, selectedCategory === 'TOOLS' && styles.filterChipActive]}
+                onPress={() => setSelectedCategory('TOOLS')}
+              >
+                <Text style={[styles.filterChipText, selectedCategory === 'TOOLS' && styles.filterChipTextActive]}>
+                  🛠️ TOOLS
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.filterChip, selectedCategory === 'WORK' && styles.filterChipActive]}
+                onPress={() => setSelectedCategory('WORK')}
+              >
+                <Text style={[styles.filterChipText, selectedCategory === 'WORK' && styles.filterChipTextActive]}>
+                  💼 WORK
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.filterChip, selectedCategory === 'FINANCE' && styles.filterChipActive]}
+                onPress={() => setSelectedCategory('FINANCE')}
+              >
+                <Text style={[styles.filterChipText, selectedCategory === 'FINANCE' && styles.filterChipTextActive]}>
+                  💳 PAY & SHOP
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.filterChip, selectedCategory === 'GAMES' && styles.filterChipActive]}
+                onPress={() => setSelectedCategory('GAMES')}
+              >
+                <Text style={[styles.filterChipText, selectedCategory === 'GAMES' && styles.filterChipTextActive]}>
+                  🎮 GAMES
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+
+            {/* Layout Mode Switcher */}
+            {!searchQuery.trim() && (
+              <View style={styles.layoutToggleRow}>
+                <TouchableOpacity
+                  style={[styles.layoutToggleBtn, layoutMode === 'CATEGORIES' && styles.layoutToggleBtnActive]}
+                  onPress={() => {
+                    setLayoutMode('CATEGORIES');
+                    setSelectedCategory('ALL');
+                  }}
+                >
+                  <Text style={[styles.layoutToggleText, layoutMode === 'CATEGORIES' && styles.layoutToggleTextActive]}>
+                    ▦ CATEGORIES
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.layoutToggleBtn, layoutMode === 'GRID' && styles.layoutToggleBtnActive]}
+                  onPress={() => setLayoutMode('GRID')}
+                >
+                  <Text style={[styles.layoutToggleText, layoutMode === 'GRID' && styles.layoutToggleTextActive]}>
+                    ☷ ALL GRID
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
           {loadingApps ? (
             <View style={styles.centered}>
               <ActivityIndicator size="large" color={Colors.hudCyan} />
-              <Text style={styles.loadingText}>Loading Installed Applications...</Text>
+              <Text style={styles.loadingText}>Indexing & Organizing Installed Apps...</Text>
             </View>
+          ) : layoutMode === 'CATEGORIES' && selectedCategory === 'ALL' && !searchQuery.trim() ? (
+            /* Smart Category Folders / Sections View */
+            <ScrollView contentContainerStyle={styles.categoriesScroll}>
+              <Text style={styles.longPressHint}>💡 Tip: Long press any app to Pin to Home Dock, Hide, or view Info</Text>
+              {categoryGroups.map((group) => (
+                <View key={group.category.key} style={styles.categoryFolderCard}>
+                  <View style={styles.categoryFolderHeader}>
+                    <View style={styles.categoryTitleRow}>
+                      <Text style={styles.categoryEmoji}>{group.category.emoji}</Text>
+                      <Text style={styles.categoryTitle}>{group.category.label}</Text>
+                    </View>
+                    <View style={styles.categoryCountBadge}>
+                      <Text style={styles.categoryCountText}>{group.apps.length} APPS</Text>
+                    </View>
+                  </View>
+                  <View style={styles.categoryAppsGrid}>
+                    {group.apps.map((item) => (
+                      <TouchableOpacity
+                        key={item.packageName}
+                        style={styles.categoryAppItem}
+                        onPress={() => SystemControlModule.launchApp(item.packageName)}
+                        onLongPress={() => setSelectedAppForAction(item)}
+                        activeOpacity={0.7}
+                      >
+                        {item.icon ? (
+                          <Image source={{ uri: item.icon }} style={styles.appIcon} />
+                        ) : (
+                          <View style={styles.appIconFallback}>
+                            <Text style={styles.appIconFallbackText}>{item.appName.charAt(0)}</Text>
+                          </View>
+                        )}
+                        <Text numberOfLines={1} style={styles.appNameText}>
+                          {item.appName}
+                        </Text>
+                        {pinnedPackages.includes(item.packageName) && (
+                          <View style={styles.pinnedMarker}>
+                            <Text style={styles.pinnedMarkerText}>⭐</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
           ) : (
+            /* Flattened Grid View for filtered/searched apps */
             <FlatList
               data={filteredApps}
               keyExtractor={(item) => item.packageName}
               numColumns={4}
               contentContainerStyle={styles.appsGrid}
+              ListHeaderComponent={
+                <Text style={styles.longPressHint}>
+                  Showing {filteredApps.length} apps • Long press to manage
+                </Text>
+              }
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.appGridItem}
                   onPress={() => SystemControlModule.launchApp(item.packageName)}
+                  onLongPress={() => setSelectedAppForAction(item)}
+                  activeOpacity={0.7}
                 >
                   {item.icon ? (
                     <Image source={{ uri: item.icon }} style={styles.appIcon} />
@@ -381,6 +565,11 @@ export const AssistantScreen: React.FC<any> = ({ navigation }) => {
                   <Text numberOfLines={1} style={styles.appNameText}>
                     {item.appName}
                   </Text>
+                  {pinnedPackages.includes(item.packageName) && (
+                    <View style={styles.pinnedMarker}>
+                      <Text style={styles.pinnedMarkerText}>⭐</Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
               )}
             />
@@ -496,6 +685,7 @@ export const AssistantScreen: React.FC<any> = ({ navigation }) => {
       )}
 
       <UpdateModal />
+      <AppActionModal />
     </View>
   );
 };
@@ -996,5 +1186,158 @@ const styles = StyleSheet.create({
     color: Colors.hudCyan,
     fontSize: 11,
     fontWeight: 'bold',
+  },
+  dockHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  dockManageText: {
+    color: Colors.hudCyan,
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  dockScrollContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  filterBarContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.cardBorder,
+  },
+  filterScroll: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingBottom: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: Colors.cardBackground,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+  },
+  filterChipActive: {
+    backgroundColor: Colors.hudCyanDim,
+    borderColor: Colors.hudCyan,
+  },
+  filterChipText: {
+    color: Colors.textDim,
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  filterChipTextActive: {
+    color: Colors.hudCyan,
+  },
+  layoutToggleRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  layoutToggleBtn: {
+    flex: 1,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+  },
+  layoutToggleBtnActive: {
+    backgroundColor: Colors.hudCyanDim,
+    borderColor: Colors.hudCyan,
+  },
+  layoutToggleText: {
+    color: Colors.textDim,
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.8,
+  },
+  layoutToggleTextActive: {
+    color: Colors.hudCyan,
+  },
+  categoriesScroll: {
+    padding: 16,
+    paddingBottom: 40,
+    gap: 16,
+  },
+  longPressHint: {
+    color: Colors.textDim,
+    fontSize: 11,
+    textAlign: 'center',
+    marginBottom: 10,
+    fontStyle: 'italic',
+  },
+  categoryFolderCard: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    padding: 14,
+  },
+  categoryFolderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+    marginBottom: 10,
+  },
+  categoryTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  categoryEmoji: {
+    fontSize: 18,
+  },
+  categoryTitle: {
+    color: Colors.textPrimary,
+    fontSize: 13,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  categoryCountBadge: {
+    backgroundColor: 'rgba(0, 229, 255, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.3)',
+  },
+  categoryCountText: {
+    color: Colors.hudCyan,
+    fontSize: 9,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  categoryAppsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: 12,
+  },
+  categoryAppItem: {
+    width: '25%',
+    alignItems: 'center',
+    padding: 4,
+    position: 'relative',
+  },
+  pinnedMarker: {
+    position: 'absolute',
+    top: 2,
+    right: 8,
+  },
+  pinnedMarkerText: {
+    fontSize: 10,
   },
 });

@@ -101,6 +101,35 @@ class SystemControlTurboModule(private val reactContext: ReactApplicationContext
     }
 
     @ReactMethod
+    fun openAppSettings(packageName: String, promise: Promise) {
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            reactContext.startActivity(intent)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("OPEN_APP_SETTINGS_FAILED", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun uninstallApp(packageName: String, promise: Promise) {
+        try {
+            val intent = Intent(Intent.ACTION_UNINSTALL_PACKAGE).apply {
+                data = Uri.parse("package:$packageName")
+                putExtra(Intent.EXTRA_RETURN_RESULT, true)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            reactContext.startActivity(intent)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("UNINSTALL_FAILED", e.message)
+        }
+    }
+
+    @ReactMethod
     fun getInstalledApps(promise: Promise) {
         CoroutineScope(Dispatchers.IO).launch {
             try {

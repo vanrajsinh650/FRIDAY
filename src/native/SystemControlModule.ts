@@ -27,6 +27,20 @@ export class SystemControlModule {
     return true;
   }
 
+  static async openAppSettings(packageName: string): Promise<boolean> {
+    if (FridaySystemControlNative?.openAppSettings) {
+      return await FridaySystemControlNative.openAppSettings(packageName);
+    }
+    return true;
+  }
+
+  static async uninstallApp(packageName: string): Promise<boolean> {
+    if (FridaySystemControlNative?.uninstallApp) {
+      return await FridaySystemControlNative.uninstallApp(packageName);
+    }
+    return true;
+  }
+
   static async getBatteryStatus(): Promise<BatteryStatus> {
     if (FridaySystemControlNative?.getBatteryStatus) {
       return await FridaySystemControlNative.getBatteryStatus();

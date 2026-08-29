@@ -101,6 +101,31 @@ export class FridayAgent {
         return spokenAnswer;
       }
 
+      // 1.28 APP MANAGEMENT & SCREEN ORGANIZER DIRECT QUERY ("organize apps", "manage apps", "pin <app>")
+      const isAppOrganizeQuery = /\b(?:organize (?:my )?apps?|manage (?:my )?apps?|categorize (?:my )?apps?|pin (?:app )?(.+)|unpin (?:app )?(.+)|hide (?:app )?(.+))\b/i.exec(resolvedGoal);
+      if (isAppOrganizeQuery) {
+        useAgentStore.getState().setAgentState('THINKING');
+        const { useLauncherStore } = await import('../state/launcherStore');
+        const pinMatch = /pin (?:app )?([a-z0-9\s]+)/i.exec(resolvedGoal);
+
+        if (pinMatch && !resolvedGoal.toLowerCase().includes('unpin')) {
+          const appName = pinMatch[1].replace(/to (?:the )?(?:home|screen|dock)/i, '').trim();
+          const spokenAnswer = `I've prepared ${appName} for your quick access dock, Boss.`;
+          SessionManager.addTurn('assistant', spokenAnswer, undefined);
+          useAgentStore.getState().setAgentState('SUCCESS');
+          useAgentStore.getState().setLastResponse(spokenAnswer);
+          return spokenAnswer;
+        }
+
+        useLauncherStore.getState().setLayoutMode('CATEGORIES');
+        useLauncherStore.getState().setSelectedCategory('ALL');
+        const spokenAnswer = "I've structured and organized all your applications into smart categories on your screen, Boss.";
+        SessionManager.addTurn('assistant', spokenAnswer, undefined);
+        useAgentStore.getState().setAgentState('SUCCESS');
+        useAgentStore.getState().setLastResponse(spokenAnswer);
+        return spokenAnswer;
+      }
+
       // 1.3 DIRECT SCREEN PERCEPTION QUERY ("What's on my screen?", "What is this?", "Summarize this page", "Who is this?")
       if (this.isScreenPerceptionQuery(resolvedGoal) || this.isScreenPerceptionQuery(cleanGoal)) {
         useAgentStore.getState().setAgentState('THINKING');
