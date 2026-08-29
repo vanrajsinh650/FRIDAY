@@ -68,14 +68,46 @@ export class FactExtractor {
       });
     }
 
-    // 5. Habits & Routines
-    const habitMatch = text.match(/\b(?:every day|every morning|every night|usually at|always at)\s+([^.!?]+)/i);
-    if (habitMatch && habitMatch[1]) {
+    // 6. Explicit Memory Statements ("remember that X", "note that Y", "keep in mind Z")
+    const explicitMatch = text.match(/\b(?:remember that|remember|note that|save fact|keep in mind)\s+([^.!?]+)/i);
+    if (explicitMatch && explicitMatch[1]) {
       items.push({
-        factText: `User routine: ${habitMatch[0].trim()}`,
+        factText: explicitMatch[1].trim(),
+        category: 'user_profile',
+        importance: 0.95,
+        confidence: 1.0,
+      });
+    }
+
+    // 7. Reminders & Tasks ("i set a reminder for...", "remind me to...", "i need to...")
+    const reminderMatch = text.match(/\b(?:remind me to|i set a reminder (?:for|to|that)|i need to|don't forget to)\s+([^.!?]+)/i);
+    if (reminderMatch && reminderMatch[1]) {
+      items.push({
+        factText: `User reminder/task: ${reminderMatch[1].trim()}`,
+        category: 'habit',
+        importance: 0.9,
+        confidence: 0.95,
+      });
+    }
+
+    // 8. Key Attributes ("my <key> is <value>", "my email is <email>", "my birthday is <date>")
+    const attrMatch = text.match(/\bmy\s+([a-zA-Z0-9_\s]+?)\s+is\s+([^.!?]+)/i);
+    if (attrMatch && attrMatch[1] && attrMatch[2] && !text.includes('name is') && !text.includes('preference')) {
+      items.push({
+        factText: `User ${attrMatch[1].trim()}: ${attrMatch[2].trim()}`,
+        category: 'user_profile',
+        importance: 0.85,
+        confidence: 0.95,
+      });
+    }
+
+    // 9. Assistant Spoken Confirmations of Scheduled Alarms/Reminders
+    if (assistantReply && (assistantReply.includes('scheduled') || assistantReply.includes('reminder') || assistantReply.includes('alarm'))) {
+      items.push({
+        factText: `System confirmation: ${assistantReply.trim()}`,
         category: 'habit',
         importance: 0.75,
-        confidence: 0.85,
+        confidence: 0.9,
       });
     }
 

@@ -3,6 +3,8 @@
 import { TaskState } from '../task/types';
 import { TaskManager } from '../task/taskManager';
 import { SessionManager } from '../session/sessionManager';
+import { ConversationManager } from '../conversationManager';
+import { LifelongMemoryEngine } from '../../memory/lifelong/LifelongMemoryEngine';
 import { StepExecutor } from './stepExecutor';
 import { Planner } from '../planner';
 import { ContextManager } from '../context';
@@ -77,11 +79,7 @@ export class AgentLoop {
       task.actionHistory.push(stepRecord);
       SessionManager.addRecentAction(`${plannedAction.toolName}: ${stepRecord.success ? 'OK' : 'FAIL'}`);
 
-      // Capture tool result from store
-      const allSteps = useAgentStore.getState().steps;
-      if (allSteps.length > 0) {
-        lastToolResultData = allSteps[allSteps.length - 1]?.result;
-      }
+      lastToolResultData = stepRecord.resultData;
 
       // 4. STATE-AWARE WAIT: Allow animations to settle
       if (
@@ -164,6 +162,18 @@ export class AgentLoop {
       } else if (tool === 'set_ringer_mode') {
         const mode = lastAction?.parameters?.mode;
         finalSpokenResponse = `Ringer mode set to ${mode}, Boss.`;
+      } else if (tool === 'schedule_alarm') {
+        finalSpokenResponse = lastToolResultData?.data?.message || lastToolResultData?.message || 'I have scheduled your reminder, Boss.';
+      } else if (tool === 'list_scheduled_tasks') {
+        finalSpokenResponse = lastToolResultData?.data?.summary || lastToolResultData?.summary || 'Here are your scheduled tasks, Boss.';
+      } else if (tool === 'cancel_scheduled_task') {
+        finalSpokenResponse = lastToolResultData?.data?.message || lastToolResultData?.message || 'Scheduled task cancelled, Boss.';
+      } else if (tool === 'schedule_routine') {
+        finalSpokenResponse = lastToolResultData?.data?.message || lastToolResultData?.message || 'Recurring routine scheduled, Boss.';
+      } else if (tool === 'run_proactive_routine') {
+        finalSpokenResponse = 'Proactive routine executed, Boss.';
+      } else if (tool === 'store_memory_fact' || tool === 'save_memory_fact') {
+        finalSpokenResponse = "I've committed that to memory, Boss.";
       } else if (tool === 'set_alarm') {
         finalSpokenResponse = lastToolResultData?.data?.summary || lastToolResultData?.summary || 'Your alarm has been set, Boss.';
       } else if (tool === 'dismiss_alarm') {
@@ -200,6 +210,13 @@ export class AgentLoop {
         finalSpokenResponse = 'Task completed, Boss.';
       }
     }
+
+    // Record turn in unified multi-turn conversation and neural lifelong memory
+    try {
+      ConversationManager.addTurn('user', task.rawGoal);
+      ConversationManager.addTurn('assistant', finalSpokenResponse);
+      LifelongMemoryEngine.getInstance().processConversationalTurn(task.rawGoal, finalSpokenResponse).catch(() => {});
+    } catch (_turnErr) {}
 
     // Honesty gate: only announce success when the task actually verified.
     if (task.verified) {

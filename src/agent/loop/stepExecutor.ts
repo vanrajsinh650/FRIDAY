@@ -135,6 +135,7 @@ export class StepExecutor {
         success: true,
         durationMs: duration,
         stateChanged: policy.mutatesUI,
+        resultData: result.data,
       };
     } else {
       useAgentStore.getState().updateStepStatus(stepId, 'failed', undefined, result.error, duration);
@@ -148,6 +149,7 @@ export class StepExecutor {
         durationMs: duration,
         stateChanged: false,
         error: result.error,
+        resultData: result.data,
       };
     }
   }

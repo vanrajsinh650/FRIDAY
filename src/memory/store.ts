@@ -141,7 +141,16 @@ export class MemoryStore {
         do {
           this.pendingSave = false;
           this.purgeExpiredFacts();
+          let existingData: any = {};
+          try {
+            const raw = await SystemControlModule.loadMemoryFile();
+            if (raw && raw.trim().length > 0) {
+              existingData = JSON.parse(raw) || {};
+            }
+          } catch {}
+
           const snapshot: MemorySnapshot = {
+            ...existingData,
             profile: this.profile,
             facts: Array.from(this.facts.values()),
             relationships: Array.from(this.relationships.values()),
@@ -390,6 +399,13 @@ export class MemoryStore {
     if (subject && predicate && object) {
       this.setRelationshipInternal(subject, predicate, object, confidence);
     }
+
+    // Ingest into Lifelong Neural Memory Engine
+    try {
+      const { LifelongMemoryEngine } = await import('./lifelong/LifelongMemoryEngine');
+      const factText = `${key}: ${value}`;
+      LifelongMemoryEngine.getInstance().ingestFact(factText, 'user_profile', importance).catch(() => {});
+    } catch {}
 
     await this.saveToDisk();
     return fact;

@@ -63,6 +63,12 @@ export class ToolVisibility {
         'cancel_scheduled_task',
         'list_scheduled_tasks',
         'run_proactive_routine',
+        'store_memory_fact',
+        'save_memory_fact',
+        'get_memory_facts',
+        'forget_memory_fact',
+        'set_relationship',
+        'manage_profile',
         'capture_screen_vision',
         'visual_tap',
       ];

@@ -45,31 +45,65 @@ export class LifelongMemoryEngine {
       if (raw && raw.trim().length > 0) {
         const data = JSON.parse(raw);
         if (data && typeof data === 'object') {
-          if (Array.isArray(data.facts)) {
-            for (const f of data.facts) {
-              if (!f || !f.id || !f.factText) continue;
-              const emb = f.embedding || EmbeddingProvider.generateEmbedding(f.factText);
-              f.embedding = emb;
-              this.facts.set(f.id, f);
-              this.vectorIndex.upsert(f.id, emb, { category: f.category });
-            }
+          const lifelongArray = Array.isArray(data.lifelongFacts)
+            ? data.lifelongFacts
+            : Array.isArray(data.facts)
+            ? data.facts
+            : [];
+
+          for (const f of lifelongArray) {
+            if (!f || !f.id) continue;
+            const factText = f.factText || (f.key && f.value ? `${f.key}: ${f.value}` : '');
+            if (!factText) continue;
+            const emb = f.embedding || EmbeddingProvider.generateEmbedding(factText);
+            const record: SemanticFactRecord = {
+              id: f.id,
+              factText,
+              category: f.category || 'preference',
+              importance: typeof f.importance === 'number' ? f.importance : 0.8,
+              confidence: typeof f.confidence === 'number' ? f.confidence : 0.95,
+              isActive: f.isActive !== false,
+              validFrom: f.validFrom || Date.now(),
+              createdAt: f.createdAt || Date.now(),
+              updatedAt: f.updatedAt || Date.now(),
+              accessCount: f.accessCount || 1,
+              lastAccessedAt: f.lastAccessedAt || Date.now(),
+              embedding: emb,
+            };
+            this.facts.set(record.id, record);
+            this.vectorIndex.upsert(record.id, emb, { category: record.category });
           }
 
           if (Array.isArray(data.entities)) {
             for (const ent of data.entities) {
-              this.graphStore.upsertEntity(ent);
+              if (ent && ent.id) {
+                this.graphStore.upsertEntity(ent);
+              }
             }
           }
 
           if (Array.isArray(data.relationships)) {
             for (const rel of data.relationships) {
-              this.graphStore.addRelationship(rel);
+              if (rel && (rel.sourceEntityId || rel.subject)) {
+                this.graphStore.addRelationship({
+                  id: rel.id || `rel_${Date.now()}`,
+                  sourceEntityId: rel.sourceEntityId || rel.subject,
+                  targetEntityId: rel.targetEntityId || rel.object,
+                  relationType: rel.relationType || rel.predicate,
+                  weight: rel.weight ?? 1.0,
+                  confidence: rel.confidence ?? 1.0,
+                  createdAt: rel.createdAt || Date.now(),
+                  updatedAt: rel.updatedAt || Date.now(),
+                });
+              }
             }
           }
 
           if (Array.isArray(data.trajectories)) {
             for (const t of data.trajectories) {
-              this.trajectories.set(t.id, t);
+              if (t && t.id) {
+                this.trajectories.set(t.id, t);
+              }
             }
           }
         }
@@ -244,12 +278,21 @@ export class LifelongMemoryEngine {
 
   private async persist(): Promise<void> {
     try {
+      let existingData: any = {};
+      try {
+        const raw = await SystemControlModule.loadMemoryFile();
+        if (raw && raw.trim().length > 0) {
+          existingData = JSON.parse(raw) || {};
+        }
+      } catch {}
+
       const snapshot = {
-        facts: Array.from(this.facts.values()),
+        ...existingData,
+        lifelongFacts: Array.from(this.facts.values()),
         entities: this.graphStore.getAllEntities(),
         relationships: this.graphStore.getRelationships(),
         trajectories: Array.from(this.trajectories.values()),
-        savedAt: Date.now(),
+        lastSaved: Date.now(),
       };
       await SystemControlModule.saveMemoryFile(JSON.stringify(snapshot, null, 2));
     } catch (_e) {}

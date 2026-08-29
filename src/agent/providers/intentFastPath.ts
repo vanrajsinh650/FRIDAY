@@ -194,38 +194,107 @@ export function resolveIntent(lastUserMsg: string): ToolCallResult | null {
     return { toolName: 'check_elevated_status', parameters: {} };
   }
 
-  // 7. Alarms & Timers
+  // 7. Alarms, Reminders & Scheduling
   if (
     lastUserMsg.includes('alarm') ||
+    lastUserMsg.includes('reminder') ||
+    lastUserMsg.includes('remind') ||
     lastUserMsg.includes('wake me up') ||
-    lastUserMsg.includes('set an alarm') ||
-    lastUserMsg.includes('set alarm')
+    lastUserMsg.includes('schedule') ||
+    lastUserMsg.includes('routine')
   ) {
+    // 7.1 Remind me / Set Reminder
+    if (
+      (lastUserMsg.startsWith('remind') ||
+        lastUserMsg.includes('remind me') ||
+        lastUserMsg.includes('set a reminder') ||
+        lastUserMsg.includes('set reminder')) &&
+      !lastUserMsg.includes('what reminder') &&
+      !lastUserMsg.includes('tell me') &&
+      !lastUserMsg.includes('show') &&
+      !lastUserMsg.includes('list')
+    ) {
+      const timeMatch = lastUserMsg.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?/i);
+      const relMatch = lastUserMsg.match(/\bin\s+(\d+)\s*(mins?|minutes?|hours?|hrs?|seconds?|secs?)\b/i);
+
+      let title = lastUserMsg
+        .replace(/^(friday|hey friday|please|could you|can you)\s+/i, '')
+        .replace(/^(remind me to|remind me|set a reminder to|set a reminder for|set reminder for|set reminder to|reminder for|reminder to)\s+/i, '')
+        .replace(/\b(at|for|by|in)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.|minutes?|mins?|hours?|hrs?)?\b/gi, '')
+        .trim();
+
+      if (!title || title.length === 0) {
+        title = 'Reminder';
+      }
+
+      let timeString: string | undefined = undefined;
+      let delayMinutes: number | undefined = undefined;
+
+      if (relMatch) {
+        delayMinutes = parseInt(relMatch[1], 10);
+      } else if (timeMatch) {
+        timeString = timeMatch[0];
+      }
+
+      return {
+        toolName: 'schedule_alarm',
+        parameters: {
+          title,
+          timeString,
+          delayMinutes,
+        },
+      };
+    }
+
+    // 7.2 Dismiss / Cancel
     if (
       lastUserMsg.includes('cancel') ||
-      lastUserMsg.includes('stop') ||
-      lastUserMsg.includes('turn off') ||
-      lastUserMsg.includes('dismiss') ||
-      lastUserMsg.includes('disable')
+      lastUserMsg.includes('stop alarm') ||
+      lastUserMsg.includes('turn off alarm') ||
+      lastUserMsg.includes('dismiss alarm') ||
+      lastUserMsg.includes('disable alarm') ||
+      lastUserMsg.includes('clear reminders') ||
+      lastUserMsg.includes('delete reminder')
     ) {
+      if (lastUserMsg.includes('reminder') || lastUserMsg.includes('schedule') || lastUserMsg.includes('routine') || lastUserMsg.includes('task')) {
+        return { toolName: 'cancel_scheduled_task', parameters: { taskId: '' } };
+      }
       return { toolName: 'dismiss_alarm', parameters: {} };
     }
 
+    // 7.3 Show / List / Check Reminders & Alarms
     if (
-      lastUserMsg.includes('show') ||
-      lastUserMsg.includes('list') ||
-      lastUserMsg.includes('open') ||
-      lastUserMsg.includes('check') ||
-      lastUserMsg.includes('what alarms')
+      lastUserMsg.includes('show alarms') ||
+      lastUserMsg.includes('show reminders') ||
+      lastUserMsg.includes('list alarms') ||
+      lastUserMsg.includes('list reminders') ||
+      lastUserMsg.includes('open alarms') ||
+      lastUserMsg.includes('open clock') ||
+      lastUserMsg.includes('check alarms') ||
+      lastUserMsg.includes('check reminders') ||
+      lastUserMsg.includes('what alarms') ||
+      lastUserMsg.includes('what reminders') ||
+      lastUserMsg.includes('my reminders') ||
+      lastUserMsg.includes('what did i set') ||
+      lastUserMsg.includes('what did i schedule') ||
+      lastUserMsg.includes('tell me what reminders') ||
+      lastUserMsg.includes('tell me reminders') ||
+      lastUserMsg.includes('what are my reminders') ||
+      lastUserMsg.includes('what reminders i set') ||
+      lastUserMsg.includes('what reminders do i have')
     ) {
+      if (lastUserMsg.includes('reminder') || lastUserMsg.includes('schedule') || lastUserMsg.includes('routine') || lastUserMsg.includes('task')) {
+        return { toolName: 'list_scheduled_tasks', parameters: { activeOnly: true } };
+      }
       return { toolName: 'show_alarms', parameters: {} };
     }
 
-    const timeMatch = lastUserMsg.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+    // 7.4 Standard Clock Alarms
+    const timeMatch = lastUserMsg.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?/i);
     if (timeMatch) {
       let hour = parseInt(timeMatch[1], 10);
       let minute = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
-      const meridiem = (timeMatch[3] || '').toLowerCase();
+      const meridiem = (timeMatch[3] || '').toLowerCase().replace(/\./g, '');
 
       if (meridiem === 'pm' && hour < 12) hour += 12;
       else if (meridiem === 'am' && hour === 12) hour = 0;

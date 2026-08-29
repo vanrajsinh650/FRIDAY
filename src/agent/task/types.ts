@@ -32,6 +32,7 @@ export interface ActionRecord {
   observedPackage?: string;
   stateChanged: boolean;
   error?: string;
+  resultData?: any;
 }
 
 export interface TaskState {

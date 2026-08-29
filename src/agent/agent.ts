@@ -17,6 +17,7 @@ import { ConversationManager } from './conversationManager';
 import { resolveIntent } from './providers/intentFastPath';
 import { VisionPerception } from './perception/visionPerception';
 import { LifelongMemoryEngine } from '../memory/lifelong/LifelongMemoryEngine';
+import { scheduler } from './proactive/scheduler';
 
 export class FridayAgent {
   private loop: AgentLoop;
@@ -191,10 +192,9 @@ export class FridayAgent {
   private async executeConversationalQuery(query: string): Promise<string> {
     try {
       await MemoryStore.initialize();
-      const memoryFacts = ScopedMemoryRetriever.retrieveRelevantFacts(query, 'conversational');
       const conversationState = ConversationManager.getState();
 
-      const conversationHistory: ModelMessage[] = conversationState.turns.slice(-6).map((t) => ({
+      const conversationHistory: ModelMessage[] = conversationState.turns.slice(-8).map((t) => ({
         role: t.role === 'assistant' ? 'assistant' : 'user',
         content: t.content,
       }));
@@ -202,9 +202,27 @@ export class FridayAgent {
       const lifelongContext = LifelongMemoryEngine.getInstance().formatContextForPrompt(query);
       const memoryContext = lifelongContext || ScopedMemoryRetriever.formatContext(query, 'conversational');
 
+      // Inject scheduled reminders and alarms context if the query relates to reminders or schedules
+      const isAskingReminders = /\b(reminder|reminders|alarm|alarms|schedule|scheduled|routine|routines|tasks?|to-?do)\b/i.test(query);
+      let schedulerContext = '';
+      if (isAskingReminders) {
+        const tasks = scheduler.listTasks(true);
+        if (tasks.length > 0) {
+          const taskDescriptions = tasks.map((t) => {
+            const time = t.targetTimestamp > 0
+              ? new Date(t.targetTimestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+              : t.recurringCron || 'Recurring';
+            return `- "${t.title}" (Scheduled: ${time})`;
+          });
+          schedulerContext = `\n\n[SCHEDULED REMINDERS & ACTIVE TASKS]\n${taskDescriptions.join('\n')}`;
+        } else {
+          schedulerContext = '\n\n[SCHEDULED REMINDERS & ACTIVE TASKS]\nNo active reminders or scheduled tasks currently set.';
+        }
+      }
+
       const systemPrompt: ModelMessage = {
         role: 'system',
-        content: `${PersonaManager.getSystemPersonaPrompt()}\n\n${memoryContext}`,
+        content: `${PersonaManager.getSystemPersonaPrompt()}\n\n${memoryContext}${schedulerContext}`,
       };
 
       ConversationManager.addTurn('user', query);
@@ -214,6 +232,7 @@ export class FridayAgent {
         textResponse?.trim() || 'All systems nominal, Boss. How can I assist?'
       );
       ConversationManager.addTurn('assistant', formattedResponse);
+      LifelongMemoryEngine.getInstance().processConversationalTurn(query, formattedResponse).catch(() => {});
 
       return formattedResponse;
     } catch (_err) {

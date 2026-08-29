@@ -64,6 +64,11 @@ export class IntentValidationFilter {
     'toggle',
     'play',
     'search',
+    'remind',
+    'reminder',
+    'schedule',
+    'alarm',
+    'routine',
   ];
 
   public static filterAndDisambiguate(rawUtterance: string): ValidatedIntent {
@@ -155,6 +160,18 @@ export class IntentValidationFilter {
         parameters: { raw: rawUtterance },
         goalType: 'MESSAGING',
         terminalConditionType: 'MUTATION_CONFIRMED',
+      };
+    }
+
+    // RULE 1.8: Reminders, Alarms & System Controls
+    const isHardwareOrReminder = /\b(torch|flashlight|battery|brightness|volume|alarm|reminder|remind|schedule|routine|silent|vibrate|wifi|bluetooth|hotspot)\b/i.test(clean);
+    if (isHardwareOrReminder && !clean.startsWith('open ') && !clean.startsWith('launch ')) {
+      return {
+        intentClass: 'STATE_CHANGE',
+        actionVerb: 'system_control',
+        parameters: { raw: rawUtterance },
+        goalType: 'SYSTEM_CONTROL',
+        terminalConditionType: 'SINGLE_ACTION_DONE',
       };
     }
 

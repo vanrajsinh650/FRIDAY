@@ -43,6 +43,12 @@ class TaskManagerClass {
       lower.includes('brightness') ||
       lower.includes('volume') ||
       lower.includes('alarm') ||
+      lower.includes('reminder') ||
+      lower.includes('remind') ||
+      lower.includes('schedule') ||
+      lower.includes('routine') ||
+      lower.includes('memory') ||
+      lower.includes('remember') ||
       lower.includes('silent') ||
       lower.includes('vibrate') ||
       lower.includes('ringer') ||

@@ -81,6 +81,9 @@ export interface MemorySnapshot {
   relationships?: RelationshipTriple[];
   lastSaved: number;
   version?: number;
+  entities?: any[];
+  trajectories?: any[];
+  lifelongFacts?: any[];
 }
 
 export interface PersonaConfig {

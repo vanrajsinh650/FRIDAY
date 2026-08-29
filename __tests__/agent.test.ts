@@ -70,5 +70,20 @@ describe('FridayAgent Core Execution Engine', () => {
     expect(featuresResult.toLowerCase()).toContain('whatsapp');
     expect(useAgentStore.getState().state).toBe('SUCCESS');
   });
+
+  test('schedules reminders and answers reminder list queries', async () => {
+    const agent = new FridayAgent();
+
+    // 1. Schedule a reminder
+    const scheduleResult = await agent.executeGoal('remind me at 9:50 to check flight status');
+    expect(scheduleResult.toLowerCase()).toContain('boss');
+    expect(scheduleResult.toLowerCase()).toContain('scheduled');
+    expect(useAgentStore.getState().state).toBe('SUCCESS');
+
+    // 2. Query scheduled reminders
+    const listResult = await agent.executeGoal('Tell me what reminders I set');
+    expect(listResult.toLowerCase()).toContain('boss');
+    expect(useAgentStore.getState().state).toBe('SUCCESS');
+  });
 });
 

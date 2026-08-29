@@ -1,7 +1,7 @@
 # FRIDAY — Living Project State
 
 > **Last Updated:** 2026-08-29  
-> **Current Phase:** Phase 8 — Autonomous Scheduled & Proactive Workflows Verified (ADR-008, ADR-017, BUG-022)  
+> **Current Phase:** Phase 8 — Autonomous Scheduled & Proactive Workflows Verified (ADR-008, ADR-017, BUG-022, BUG-023)  
 > **Primary Tech Stack:** React Native (TypeScript) + Android Native Modules (Kotlin/Java) + FastAPI VPS Brain  
 
 ---
@@ -10,7 +10,7 @@
 
 | Component | Architecture State | Code Implementation | Device Verification |
 | :--- | :--- | :--- | :--- |
-| **Autonomous Scheduling & Routines** | Decoupled AlarmManager + WorkManager + Proactive Monitors | `src/agent/proactive/scheduler.ts`, `src/agent/proactive/routines.ts`, `src/tools/schedulerTools.ts`, Kotlin `SchedulerTurboModule`, `FridaySchedulerReceiver` | Unit & Integration Tested (147/147 Jest passing); Live AlarmManager & Receiver Ready |
+| **Autonomous Scheduling & Routines** | Decoupled AlarmManager + WorkManager + Proactive Monitors | `src/agent/proactive/scheduler.ts`, `src/agent/proactive/routines.ts`, `src/tools/schedulerTools.ts`, Kotlin `SchedulerTurboModule`, `FridaySchedulerReceiver` | Unit & Integration Tested (180/180 Jest passing); Live AlarmManager & Receiver Ready |
 | **React Native App & HUD** | Clean TypeScript Architecture | `src/components/`, `src/screens/`, `src/state/` | Emulated / Verified in TS & Jest |
 | **Floating Overlay HUD** | Persistent 24/7 WindowManager Overlay (`TYPE_APPLICATION_OVERLAY`) | Kotlin `FridayFloatingOverlayService`, `FloatingOverlayTurboModule` + TS `FloatingOverlayModule` | Unit & Integration Tested in Jest; Live Android Service Ready |
 | **Agent Core Loop** | DeepSeek-inspired State Machine | `FridayAgent`, `Planner`, `PromptBuilder`, `Verifier` | Unit Tested & Dynamic LLM Ready |

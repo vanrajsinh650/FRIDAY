@@ -442,4 +442,47 @@ describe('Phase 6 — Long-Term Structured Memory & Persona Profile Graph', () =
       expect(cleanedCode).toContain('5 + 5 = 10');
     });
   });
+
+  describe('7. Neural Lifelong Memory & Unified Snapshot Persistence', () => {
+    test('extracts facts and reminders from conversational turns into neural vector store', async () => {
+      const { LifelongMemoryEngine } = await import('../src/memory/lifelong/LifelongMemoryEngine');
+      const { FactExtractor } = await import('../src/memory/lifelong/FactExtractor');
+
+      const engine = LifelongMemoryEngine.getInstance();
+      await engine.initialize();
+
+      // Test fact extraction rules
+      const extracted1 = FactExtractor.extractFromTurn('My favorite music app is Spotify');
+      expect(extracted1.length).toBeGreaterThan(0);
+      expect(extracted1[0].factText).toContain('Spotify');
+
+      const extracted2 = FactExtractor.extractFromTurn('Remind me to call Tony Stark tomorrow at 10:00 AM');
+      expect(extracted2.length).toBeGreaterThan(0);
+      expect(extracted2[0].category).toBe('habit');
+
+      const extracted3 = FactExtractor.extractFromTurn('Remember that my safe code is 4096');
+      expect(extracted3.length).toBeGreaterThan(0);
+      expect(extracted3[0].factText).toContain('safe code is 4096');
+
+      // Process turn in engine
+      await engine.processConversationalTurn('My favorite car is Audi R8');
+      const searchRes = engine.searchMemories('Audi R8');
+      expect(searchRes.length).toBeGreaterThan(0);
+      expect(searchRes[0].factText).toContain('Audi R8');
+    });
+
+    test('synchronizes MemoryStore setFact with LifelongMemoryEngine without file corruption', async () => {
+      const { LifelongMemoryEngine } = await import('../src/memory/lifelong/LifelongMemoryEngine');
+      const engine = LifelongMemoryEngine.getInstance();
+      await engine.initialize();
+
+      // Set structured fact
+      await MemoryStore.setFact('PREFERENCE', 'Preferred Language', 'TypeScript');
+      expect(MemoryStore.getFact('Preferred Language')?.value).toBe('TypeScript');
+
+      // Ensure lifelong engine has context formatted
+      const context = engine.formatContextForPrompt('TypeScript');
+      expect(context.toLowerCase()).toContain('typescript');
+    });
+  });
 });

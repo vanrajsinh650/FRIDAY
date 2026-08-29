@@ -24,6 +24,11 @@ export class PromptBuilder {
 
     const recentActions = (snapshot.recentActionHistory || []).join('\n') || 'No prior actions.';
 
+    const conversationTurns = (snapshot.conversationHistory || [])
+      .slice(-6)
+      .map((t) => `${t.role === 'assistant' ? 'FRIDAY' : 'User'}: ${t.content}`)
+      .join('\n');
+
     const systemPrompt = `You are F.R.I.D.A.Y., an autonomous Vision-Grounded Mobile GUI Agent operating a live Android device.
 
 [CORE OPERATING PRINCIPLES]
@@ -47,6 +52,9 @@ export class PromptBuilder {
      * go_back(): System back navigation.
      * go_home(): System home screen.
      * wait_for_element(query, timeoutMs): Wait for a screen transition.
+     * schedule_alarm(title, timeString, delayMinutes): Schedule an exact reminder/alarm.
+     * list_scheduled_tasks(activeOnly): List all active scheduled reminders and routines.
+     * cancel_scheduled_task(taskId): Cancel an active reminder or routine.
      * none(reply): Spoken response when conversation or task is complete.
 
 3. THINKING PROCESS:
@@ -67,6 +75,9 @@ ${snapshot.activeGoal}
 [TERMINAL GOAL CONDITIONS]
 ${terminalConditionSummary}
 
+[RECENT CONVERSATION HISTORY]
+${conversationTurns || 'No previous conversation turns.'}
+
 [USER PROFILE & MEMORY]
 ${memorySnippet || 'User is Boss.'}
 
@@ -83,9 +94,16 @@ ${grounding.formattedCatalog}
 ${formattedScreen}
 `;
 
-    return [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: snapshot.activeGoal },
-    ];
+    const messages: ModelMessage[] = [{ role: 'system', content: systemPrompt }];
+    if (snapshot.conversationHistory && snapshot.conversationHistory.length > 0) {
+      for (const t of snapshot.conversationHistory.slice(-4)) {
+        messages.push({
+          role: t.role === 'assistant' ? 'assistant' : 'user',
+          content: t.content,
+        });
+      }
+    }
+    messages.push({ role: 'user', content: snapshot.activeGoal });
+    return messages;
   }
 }

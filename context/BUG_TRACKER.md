@@ -31,6 +31,7 @@
 | BUG-016 | 900 anim/sec rAF animation storm on JS thread | P1 | Verified | `src/components/VoiceWaveform.tsx` | Spawning 15 Animated.timing instances inside 60fps requestAnimationFrame loop | Used direct Animated.Value.setValue() in rAF loop without allocating timing objects |
 | BUG-021 | Privileged IPC stream deadlocks, shell command injection & Shizuku lifecycle risks | P0 | Verified | `android/modules/RootControlTurboModule.kt`, `src/native/RootControlModule.ts`, `src/tools/rootControlTools.ts`, `AndroidManifest.xml` | Sequential stream reading blocked on OS pipe buffer; unvalidated package/permission shell interpolation; missing Shizuku permission; un-sanitized newlines | Implemented concurrent stream draining, finally process cleanup, strict regex validation for packages & permissions, control char sanitization, AndroidManifest API_V23 permission, and fallback error propagation |
 | BUG-022 | Autonomous loop regression & deprecated NVIDIA model 410 Gone error | P0 | Verified | `src/agent/loop/agentLoop.ts`, `src/agent/planner.ts`, `src/agent/agent.ts`, `src/state/settingsStore.ts` | Agent loop diverted tasks into un-mocked experimental reasoner; Tier-0 offline intents removed; YouTube & WhatsApp multi-step flows stripped; NVIDIA llama-3.1-8b sunset on 2026-08-26 | Restored standard AgentLoop and complete deterministic Planner flows; restored Tier-0 offline intents in agent.ts and router; updated default model to meta/llama-3.3-70b-instruct; 177/177 tests green |
+| BUG-023 | Lifelong neural memory clobbering, lost multi-turn context, and broken reminder scheduling | P0 | Verified | `src/memory/`, `src/agent/`, `src/tools/schedulerTools.ts`, `src/agent/providers/intentFastPath.ts` | Storage collision between MemoryStore and LifelongMemoryEngine on disk; ConversationManager omitted during device loop; PromptBuilder ignored conversation history; reminder goals defaulted to APP_OPERATION; time regex bugs in scheduler tools | Unified storage schema preserving structured profile + vector/graph memories; synchronized MemoryStore & LifelongMemoryEngine; injected conversation history & scheduler context into PromptBuilder and conversational queries; enhanced scheduler tools regex & intent fast-paths; 180/180 tests green |
 
 ---
 
@@ -199,3 +200,30 @@
   - Updated default NVIDIA model to `meta/llama-3.3-70b-instruct`.
   - Cleaned up unused experimental files.
   - Verified 100% green test suite across all 11 suites and 177 tests.
+
+### [BUG-023] Lifelong Neural Memory Clobbering, Lost Multi-Turn Context, and Broken Reminder Scheduling
+
+- **Severity:** P0 (Memory Persistence Destruction & Core Scheduling Broken)
+- **Status:** Verified
+- **Component:** `src/memory/`, `src/agent/`, `src/tools/schedulerTools.ts`, `src/agent/providers/intentFastPath.ts`, `src/agent/loop/agentLoop.ts`
+- **Reproduction Steps:**
+  1. Ask "Remind me at 9:50 to buy milk" or "Set a reminder at 10:00 a.m.". Agent fails or returns generic "Opened app" / "Task completed".
+  2. Ask "Tell me what reminders I set". Agent says "What is it? What would be your reminder?" with no awareness of set reminders.
+  3. Tell FRIDAY personal facts or execute device actions across multiple conversational turns; FRIDAY forgets previous questions and wipes saved lifelong vector embeddings on disk.
+- **Expected Behavior:** FRIDAY retains complete conversational continuity across turns, persists lifelong neural facts/entities/trajectories alongside profile preferences without disk collisions, schedules one-shot reminders at exact human times ("9:50", "10:00 a.m.", "in 15 minutes"), and accurately recites active scheduled tasks when asked.
+- **Actual Behavior:**
+  1. `MemoryStore.saveToDisk` and `LifelongMemoryEngine.persist` called `SystemControlModule.saveMemoryFile` with incompatible schemas, destroying each other's data on disk.
+  2. `AgentLoop` only recorded turns into `SessionManager`, leaving `ConversationManager` empty for subsequent turns.
+  3. `PromptBuilder.buildSystemPrompt` completely omitted `snapshot.conversationHistory`.
+  4. Reminders were not recognized in `TaskManager.ts` as `SYSTEM_CONTROL`, causing reminder goals to be treated as `APP_OPERATION` (trying to launch an app named "set a reminder at 9:50").
+  5. `parseTimeStringToTimestamp` in `schedulerTools.ts` failed on dots ("10:00 a.m.") and prepositions ("at 9:50").
+  6. `executeConversationalQuery` lacked scheduled tasks context injection when asked about reminders.
+- **Fix & Regression Test:**
+  - Unified memory storage schema (`MemorySnapshot`) merging profile, key-value facts, semantic vector facts, entities, and trajectories safely.
+  - Synchronized `MemoryStore.setFact` and `store_memory_fact` to automatically index into `LifelongMemoryEngine` vector store.
+  - Recorded user and assistant turns into `ConversationManager` and `LifelongMemoryEngine` on all execution paths in `agentLoop.ts` and `agent.ts`.
+  - Injected recent conversation turns into `PromptBuilder.buildSystemPrompt` and `executeConversationalQuery`.
+  - Added live active task list injection from `scheduler.listTasks(true)` into `executeConversationalQuery` when user asks about reminders/schedules.
+  - Added robust human time string parsing supporting "9:50", "10:00 a.m.", relative delays ("in 15 minutes"), and cleaned reminder titles.
+  - Added dedicated reminder and scheduling fast-paths and response synthesis in `intentFastPath.ts`, `taskManager.ts`, and `agentLoop.ts`.
+  - Comprehensive test suite updated with all 11 suites and 180 tests passing green.

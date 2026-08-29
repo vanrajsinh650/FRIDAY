@@ -30,7 +30,7 @@ export const scheduleAlarmTool: ToolDefinition = {
       },
       timeString: {
         type: 'string',
-        description: 'Time string (e.g. "8:00 AM", "14:30") to schedule for the current/next day.',
+        description: 'Time string (e.g. "8:00 AM", "14:30", "9:50", "10:00 a.m.") to schedule for the current/next day.',
       },
     },
     required: ['title'],
@@ -42,15 +42,31 @@ export const scheduleAlarmTool: ToolDefinition = {
     timeString?: string;
   }): Promise<ToolResult> => {
     try {
+      let title = params.title || 'Scheduled Reminder';
       let targetTimestamp = params.timestamp;
 
-      if (!targetTimestamp && params.delayMinutes !== undefined && params.delayMinutes > 0) {
-        targetTimestamp = Date.now() + params.delayMinutes * 60 * 1000;
+      // Auto-extract timeString from title if not explicitly passed
+      if (!targetTimestamp && !params.delayMinutes && !params.timeString) {
+        const extractedTime = parseTimeStringToTimestamp(title);
+        if (extractedTime) {
+          targetTimestamp = extractedTime;
+        }
       } else if (!targetTimestamp && params.timeString) {
         const parsed = parseTimeStringToTimestamp(params.timeString);
         if (parsed) {
           targetTimestamp = parsed;
         }
+      } else if (!targetTimestamp && params.delayMinutes !== undefined && params.delayMinutes > 0) {
+        targetTimestamp = Date.now() + params.delayMinutes * 60 * 1000;
+      }
+
+      // Clean command prefixes from title
+      title = title
+        .replace(/^(remind me to|remind me|set a reminder to|set a reminder for|set reminder for|set reminder to|schedule alarm for|set alarm for)\s+/i, '')
+        .replace(/\b(at|for|by)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?\b/gi, '')
+        .trim();
+      if (!title || title.length === 0) {
+        title = 'Scheduled Reminder';
       }
 
       if (!targetTimestamp || isNaN(targetTimestamp)) {
@@ -58,8 +74,12 @@ export const scheduleAlarmTool: ToolDefinition = {
         targetTimestamp = Date.now() + 10 * 60 * 1000;
       }
 
-      const task = await scheduler.scheduleOneShotAlarm(params.title, targetTimestamp);
-      const dateStr = new Date(task.targetTimestamp).toLocaleString('en-US');
+      const task = await scheduler.scheduleOneShotAlarm(title, targetTimestamp);
+      const dateStr = new Date(task.targetTimestamp).toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
 
       return {
         success: true,
@@ -68,7 +88,7 @@ export const scheduleAlarmTool: ToolDefinition = {
           title: task.title,
           targetTimestamp: task.targetTimestamp,
           formattedTime: dateStr,
-          message: `Scheduled alarm "${task.title}" for ${dateStr}.`,
+          message: `Scheduled reminder "${task.title}" for ${dateStr}, Boss.`,
         },
       };
     } catch (err: any) {
@@ -190,19 +210,32 @@ export const listScheduledTasksTool: ToolDefinition = {
   execute: async (params: { activeOnly?: boolean }): Promise<ToolResult> => {
     try {
       const tasks = scheduler.listTasks(params?.activeOnly ?? true);
+      const formattedTasks = tasks.map((t) => {
+        const timeStr = t.targetTimestamp > 0
+          ? new Date(t.targetTimestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+          : t.recurringCron || 'Recurring';
+        return {
+          id: t.id,
+          type: t.taskType,
+          title: t.title,
+          targetTimestamp: t.targetTimestamp,
+          formattedTime: timeStr,
+          recurringCron: t.recurringCron,
+          isActive: t.isActive !== false,
+          lastExecutedAt: t.lastExecutedAt,
+        };
+      });
+
+      const summary = formattedTasks.length > 0
+        ? `You have ${formattedTasks.length} active reminder${formattedTasks.length > 1 ? 's' : ''}, Boss: ${formattedTasks.map((t) => `"${t.title}" at ${t.formattedTime}`).join(', ')}.`
+        : 'You have no scheduled reminders or alarms set at this time, Boss.';
+
       return {
         success: true,
         data: {
           count: tasks.length,
-          tasks: tasks.map((t) => ({
-            id: t.id,
-            type: t.taskType,
-            title: t.title,
-            targetTimestamp: t.targetTimestamp,
-            recurringCron: t.recurringCron,
-            isActive: t.isActive !== false,
-            lastExecutedAt: t.lastExecutedAt,
-          })),
+          tasks: formattedTasks,
+          summary,
         },
       };
     } catch (err: any) {
@@ -265,26 +298,96 @@ export const runProactiveRoutineTool: ToolDefinition = {
 };
 
 /**
- * Helper to parse human time string (e.g. "8:00 AM", "14:30") to epoch timestamp.
+ * Helper to parse human time string (e.g. "8:00 AM", "14:30", "9:50", "10:00 a.m.") to epoch timestamp.
  */
-function parseTimeStringToTimestamp(timeStr: string): number | null {
-  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})(?:\s*([aApP][mM]))?$/);
-  if (!match) return null;
+export function parseTimeStringToTimestamp(timeStr: string): number | null {
+  if (!timeStr || typeof timeStr !== 'string') return null;
+  const raw = timeStr.trim().toLowerCase();
 
-  let hours = parseInt(match[1], 10);
-  const minutes = parseInt(match[2], 10);
-  const ampm = match[3]?.toUpperCase();
-
-  if (ampm === 'PM' && hours < 12) hours += 12;
-  if (ampm === 'AM' && hours === 12) hours = 0;
-
-  const target = new Date();
-  target.setHours(hours, minutes, 0, 0);
-
-  // If time is in the past for today, schedule for tomorrow
-  if (target.getTime() <= Date.now()) {
-    target.setDate(target.getDate() + 1);
+  // 1. Relative delay check: "in X minutes", "in X hours", "in X mins"
+  const relMatch = raw.match(/\bin\s+(\d+)\s*(mins?|minutes?|hours?|hrs?|seconds?|secs?)\b/i);
+  if (relMatch) {
+    const amount = parseInt(relMatch[1], 10);
+    const unit = relMatch[2].toLowerCase();
+    if (!isNaN(amount) && amount > 0) {
+      if (unit.startsWith('hour') || unit.startsWith('hr')) {
+        return Date.now() + amount * 60 * 60 * 1000;
+      }
+      if (unit.startsWith('sec')) {
+        return Date.now() + amount * 1000;
+      }
+      return Date.now() + amount * 60 * 1000;
+    }
   }
 
-  return target.getTime();
+  // 2. Clean prepositions and normalize dots in a.m. / p.m.
+  const cleaned = raw
+    .replace(/\b(at|for|by|around|approx|scheduled for|tomorrow at|today at)\s+/gi, '')
+    .replace(/a\.m\./gi, 'am')
+    .replace(/p\.m\./gi, 'pm')
+    .replace(/o'clock/gi, '')
+    .trim();
+
+  const isTomorrow = raw.includes('tomorrow');
+  const isNightOrEve = raw.includes('night') || raw.includes('evening') || raw.includes('pm') || raw.includes('p.m.');
+  const isMorning = raw.includes('morning') || raw.includes('am') || raw.includes('a.m.');
+
+  // Check "H:M" or "H:M am/pm"
+  const colonMatch = cleaned.match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+  if (colonMatch) {
+    let hours = parseInt(colonMatch[1], 10);
+    const minutes = parseInt(colonMatch[2], 10);
+    const ampm = (colonMatch[3] || (isNightOrEve ? 'pm' : isMorning ? 'am' : '')).toLowerCase();
+
+    if (ampm === 'pm' && hours < 12) hours += 12;
+    if (ampm === 'am' && hours === 12) hours = 0;
+
+    const target = new Date();
+    target.setHours(hours, minutes, 0, 0);
+
+    if (isTomorrow) {
+      target.setDate(target.getDate() + 1);
+    } else if (target.getTime() <= Date.now()) {
+      // If no am/pm was specified and adding 12 hours makes it in the future today, choose PM
+      if (!colonMatch[3] && !isMorning && hours < 12) {
+        const pmTarget = new Date(target.getTime());
+        pmTarget.setHours(hours + 12);
+        if (pmTarget.getTime() > Date.now()) {
+          return pmTarget.getTime();
+        }
+      }
+      target.setDate(target.getDate() + 1);
+    }
+    return target.getTime();
+  }
+
+  // Check standalone hour "H am/pm" or "H"
+  const hourMatch = cleaned.match(/\b(\d{1,2})\s*(am|pm)?\b/i);
+  if (hourMatch) {
+    let hours = parseInt(hourMatch[1], 10);
+    const minutes = 0;
+    const ampm = (hourMatch[2] || (isNightOrEve ? 'pm' : isMorning ? 'am' : '')).toLowerCase();
+
+    if (ampm === 'pm' && hours < 12) hours += 12;
+    if (ampm === 'am' && hours === 12) hours = 0;
+
+    const target = new Date();
+    target.setHours(hours, minutes, 0, 0);
+
+    if (isTomorrow) {
+      target.setDate(target.getDate() + 1);
+    } else if (target.getTime() <= Date.now()) {
+      if (!hourMatch[2] && !isMorning && hours < 12) {
+        const pmTarget = new Date(target.getTime());
+        pmTarget.setHours(hours + 12);
+        if (pmTarget.getTime() > Date.now()) {
+          return pmTarget.getTime();
+        }
+      }
+      target.setDate(target.getDate() + 1);
+    }
+    return target.getTime();
+  }
+
+  return null;
 }
