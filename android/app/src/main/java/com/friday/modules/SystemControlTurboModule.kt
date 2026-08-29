@@ -207,6 +207,16 @@ class SystemControlTurboModule(private val reactContext: ReactApplicationContext
     @ReactMethod
     fun openDefaultLauncherSettings(promise: Promise) {
         try {
+            val vivoIntent = Intent().apply {
+                setClassName("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.DefaultAppSettingActivity")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            reactContext.startActivity(vivoIntent)
+            promise.resolve(true)
+            return
+        } catch (_: Exception) {}
+
+        try {
             val intent = Intent(Settings.ACTION_HOME_SETTINGS).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
