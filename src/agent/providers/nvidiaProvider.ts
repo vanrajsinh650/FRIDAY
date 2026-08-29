@@ -8,7 +8,7 @@ export class NvidiaProvider implements ModelProvider {
   name = 'nvidia';
   supportsVision = true;
   private baseUrl = 'https://integrate.api.nvidia.com/v1/chat/completions';
-  private defaultModel = 'meta/llama-3.3-70b-instruct';
+  private defaultModel = 'nvidia/llama-3.1-nemotron-70b-instruct';
 
   private getApiKey(): string {
     return useSettingsStore.getState().nvidiaApiKey || getSecret('NVIDIA_API_KEY');

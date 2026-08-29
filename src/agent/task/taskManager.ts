@@ -12,9 +12,9 @@ class TaskManagerClass {
     let goalType: GoalType = 'APP_OPERATION';
     const terminalConditions: TerminalCondition[] = [];
 
-    // 1. Conversational Queries & Questions (e.g. "Can you sing my song?", "What is...", "Tell me...")
-    const isQuestionOrChat = /^(can you|could you|sing|tell me|who|what|why|how|when|where|explain|joke|poem)\b/i.test(lower);
-    if (isQuestionOrChat && !lower.startsWith('open ') && !lower.startsWith('launch ')) {
+    // 1. Conversational Queries & Questions (e.g. "Can you sing my song?", "What is...", "Did Tanmay Bhat upload...", "Tell me...")
+    const isQuestionOrChat = /^(can you|could you|sing|tell me|who|what|why|how|when|where|explain|joke|poem|did|has|have|does|do|is|are|was|were|will|would|should|check if|find if)\b/i.test(lower);
+    if (isQuestionOrChat && !lower.startsWith('open ') && !lower.startsWith('launch ') && !lower.startsWith('khol ') && !lower.startsWith('chalu ')) {
       goalType = 'CONVERSATIONAL';
       terminalConditions.push({
         type: 'SINGLE_ACTION_DONE',

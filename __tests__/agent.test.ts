@@ -85,5 +85,21 @@ describe('FridayAgent Core Execution Engine', () => {
     expect(listResult.toLowerCase()).toContain('boss');
     expect(useAgentStore.getState().state).toBe('SUCCESS');
   });
+
+  test('answers creator and video upload questions conversationally', async () => {
+    const agent = new FridayAgent();
+    const result = await agent.executeGoal('Did Tanmay Bhat upload any video on YouTube recently?');
+    expect(result.toLowerCase()).toContain('boss');
+    expect(useAgentStore.getState().state).toBe('SUCCESS');
+  });
+
+  test('dynamically launches non-hardcoded apps like Pragati Setu', async () => {
+    const agent = new FridayAgent();
+    const result = await agent.executeGoal('Open Pragati Setu');
+    expect(result.toLowerCase()).toContain('boss');
+    expect(useAgentStore.getState().state).toBe('SUCCESS');
+    expect(useAgentStore.getState().steps.length).toBeGreaterThanOrEqual(1);
+    expect(useAgentStore.getState().steps[0].toolName).toBe('launch_app');
+  });
 });
 

@@ -75,7 +75,7 @@ export class ToolVisibility {
       return allSchemas.filter((s) => allowed.includes(s.function.name));
     }
 
-    // Default: Return full schema set
+    // Full autonomous tool schema access for the reasoning LLM
     return allSchemas;
   }
 }

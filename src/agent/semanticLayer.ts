@@ -27,6 +27,9 @@ export class SemanticLayer {
     ['Camera', ['camra', 'photo camera']],
     ['Gallery', ['photos app', 'galery', 'gallary']],
     ['Settings', ['setting', 'setings', 'system settings']],
+    ['Tanmay Bhat', ['tanmay bhatt', 'tanmay bhart', 'tanmay bat', 'tanmey bhat', 'tanmay bahtt']],
+    ['Pragati Setu', ['pragati setu', 'pragati detu', 'pragati dx12', 'pragati seto', 'pragati sethu', 'pragati setu app']],
+    ['Aarogya Setu', ['arogya setu', 'arogya seto', 'aarogya sethu']],
   ]);
 
   static process(rawTranscript: string, context: {

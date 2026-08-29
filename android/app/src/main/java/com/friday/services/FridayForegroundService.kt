@@ -595,9 +595,13 @@ class FridayForegroundService : Service() {
                         .addFormDataPart("response_format", "json")
                         .addFormDataPart("file", "speech.wav", wavData.toRequestBody("audio/wav".toMediaTypeOrNull()))
 
-                    val langCode = if (!language.isNullOrBlank()) language.split("-", "_")[0].lowercase() else "en"
-                    requestBodyBuilder.addFormDataPart("language", langCode)
-                    requestBodyBuilder.addFormDataPart("prompt", "FRIDAY, Hey Friday, Boss, Tony Stark, YouTube, WhatsApp, Taarak Mehta, open, play, call, send, search, volume, battery, alarms, flashlight, Vega, Yes Boss, acknowledge, clear.")
+                    val whisperPrompt = "FRIDAY, Hey Friday, Boss, Tony Stark, Pragati Setu, Aarogya Setu, Tanmay Bhat, YouTube, WhatsApp, Instagram, Telegram, Spotify, Taarak Mehta, video, upload, uploaded, recent, open, launch, kholo, chalu, band, play, search, find, call, send, message, volume, battery, reminder, alarms, flashlight, kya hai, batao, dikhao, check, full screen, setting, delete, clear."
+                    requestBodyBuilder.addFormDataPart("prompt", whisperPrompt)
+
+                    if (!language.isNullOrBlank() && language.lowercase() != "auto") {
+                        val langCode = language.split("-", "_")[0].lowercase()
+                        requestBodyBuilder.addFormDataPart("language", langCode)
+                    }
 
                     val request = Request.Builder()
                         .url("https://api.groq.com/openai/v1/audio/transcriptions")
@@ -633,8 +637,13 @@ class FridayForegroundService : Service() {
                 .addFormDataPart("response_format", "json")
                 .addFormDataPart("file", "speech.wav", wavData.toRequestBody("audio/wav".toMediaTypeOrNull()))
 
-            val langCode = if (!language.isNullOrBlank()) language.split("-", "_")[0].lowercase() else "en"
-            requestBodyBuilder.addFormDataPart("language", langCode)
+            val whisperPrompt = "FRIDAY, Hey Friday, Boss, Tony Stark, Pragati Setu, Aarogya Setu, Tanmay Bhat, YouTube, WhatsApp, Instagram, Telegram, Spotify, Taarak Mehta, video, upload, uploaded, recent, open, launch, kholo, chalu, band, play, search, find, call, send, message, volume, battery, reminder, alarms, flashlight, kya hai, batao, dikhao, check, full screen, setting, delete, clear."
+            requestBodyBuilder.addFormDataPart("prompt", whisperPrompt)
+
+            if (!language.isNullOrBlank() && language.lowercase() != "auto") {
+                val langCode = language.split("-", "_")[0].lowercase()
+                requestBodyBuilder.addFormDataPart("language", langCode)
+            }
 
             val request = Request.Builder()
                 .url("https://api.openai.com/v1/audio/transcriptions")

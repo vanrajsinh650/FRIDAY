@@ -59,11 +59,17 @@ export class AgentLoop {
       SessionManager.emitEvent('AGENT_REASONED', { action: plannedAction.toolName, params: plannedAction.parameters });
 
       if (plannedAction.toolName === 'none' || plannedAction.toolName === 'speak_response') {
-        if (task.actionHistory.length === 0) {
-          finalSpokenResponse =
-            plannedAction.parameters?.reply ||
-            plannedAction.description ||
-            'All set, Boss.';
+        const replyText =
+          plannedAction.parameters?.reply ||
+          plannedAction.parameters?.response ||
+          plannedAction.description;
+        if (
+          replyText &&
+          !/^(action executed successfully|app opened successfully|execute none)$/i.test(replyText.trim())
+        ) {
+          finalSpokenResponse = replyText;
+        } else if (task.actionHistory.length === 0) {
+          finalSpokenResponse = replyText || 'All set, Boss.';
         }
         task.verified = true;
         task.status = 'COMPLETED';

@@ -176,16 +176,16 @@ export class FridayAgent {
       return false;
     }
 
-    // Explicit action patterns must go to TaskManager/AgentLoop
-    const actionKeywords = /\b(open|launch|play|send|message|call|dial|turn on|turn off|set volume|set brightness|set alarm|close|flashlight|torch|bluetooth|wifi|hotspot|kill|force stop|force-stop|root|shizuku|elevated|permission|capture|take|click|tap|press|photo|picture|camera|shutter|snap|shoot|scroll|swipe)\b/i;
-    if (actionKeywords.test(lower)) {
+    // Imperative command verbs that must always run on-device actions
+    const imperativeCommands = /^(open|launch|khol|chalu|play|send|message|text|call|dial|turn on|turn off|set volume|set brightness|set alarm|set reminder|close|kill|force stop|force-stop|root|shizuku|elevated|capture|take photo|take picture|scroll|swipe)\b/i;
+    if (imperativeCommands.test(lower)) {
       return false;
     }
 
     if (evalType === 'CONVERSATIONAL') return true;
 
-    // Knowledge / Trivia / Chat indicators
-    const isQn = /^(who|what|why|how|when|where|tell me|explain|can you|could you)\b/i.test(lower);
+    // Knowledge / Trivia / Q&A / Video inquiry indicators
+    const isQn = /^(who|what|why|how|when|where|tell me|explain|can you|could you|did|has|have|does|do|is|are|was|were|will|would|should|check if|find if|show me)\b/i.test(lower);
     return isQn;
   }
 
