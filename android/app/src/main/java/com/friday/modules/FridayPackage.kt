@@ -24,7 +24,8 @@ class FridayPackage : ReactPackage {
             FloatingOverlayTurboModule(reactContext),
             RootControlTurboModule(reactContext),
             SchedulerTurboModule(reactContext),
-            ScreenCaptureTurboModule(reactContext)
+            ScreenCaptureTurboModule(reactContext),
+            InAppUpdateTurboModule(reactContext)
         )
     }
 

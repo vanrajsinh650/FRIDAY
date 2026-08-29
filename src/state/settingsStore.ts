@@ -14,6 +14,7 @@ export interface SettingsStore {
   visionFallbackEnabled: boolean;
   wakeWordSensitivity: number;
   hapticFeedback: boolean;
+  updateManifestUrl: string;
   
   setSettings: (settings: Partial<SettingsStore>) => void;
 }
@@ -31,6 +32,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   visionFallbackEnabled: true,
   wakeWordSensitivity: 0.7,
   hapticFeedback: true,
+  updateManifestUrl: 'https://raw.githubusercontent.com/Friday-AI/releases/main/update.json',
 
   setSettings: (updates) => set((state) => ({ ...state, ...updates })),
 }));

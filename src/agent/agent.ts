@@ -86,6 +86,21 @@ export class FridayAgent {
         return spokenAnswer;
       }
 
+      // 1.25 IN-APP SYSTEM UPDATE DIRECT QUERY ("Check for updates", "Update the app", "Any updates")
+      const isUpdateQuery = /\b(?:check (?:for )?updates?|update (?:the )?(?:app|friday|application)|any updates? available|system updates?)\b/i.test(resolvedGoal);
+      if (isUpdateQuery) {
+        useAgentStore.getState().setAgentState('THINKING');
+        const { InAppUpdateService } = await import('../services/InAppUpdateService');
+        const res = await InAppUpdateService.checkForUpdates(false);
+        const spokenAnswer = res.isUpdateAvailable
+          ? `I found a new system update, version ${res.latestVersion}. The update package is ready to download.`
+          : `FRIDAY is completely up to date on version ${res.currentVersion}, Boss.`;
+        SessionManager.addTurn('assistant', spokenAnswer, undefined);
+        useAgentStore.getState().setAgentState('SUCCESS');
+        useAgentStore.getState().setLastResponse(spokenAnswer);
+        return spokenAnswer;
+      }
+
       // 1.3 DIRECT SCREEN PERCEPTION QUERY ("What's on my screen?", "What is this?", "Summarize this page", "Who is this?")
       if (this.isScreenPerceptionQuery(resolvedGoal) || this.isScreenPerceptionQuery(cleanGoal)) {
         useAgentStore.getState().setAgentState('THINKING');

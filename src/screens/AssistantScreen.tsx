@@ -26,6 +26,9 @@ import { InstalledApp, DeviceStats } from '../native/types';
 
 import { PocketTTSEngine } from '../voice/tts';
 import { ResponseShaper } from '../voice/responseShaper';
+import { useUpdateStore } from '../state/updateStore';
+import { InAppUpdateService } from '../services/InAppUpdateService';
+import { UpdateModal } from '../components/UpdateModal';
 
 export const AssistantScreen: React.FC<any> = ({ navigation }) => {
   const agentState = useAgentStore((s) => s.state);
@@ -35,6 +38,8 @@ export const AssistantScreen: React.FC<any> = ({ navigation }) => {
   const errorMessage = useAgentStore((s) => s.errorMessage);
   const transcriptStream = useVoiceStore((s) => s.transcriptStream);
   const isAssistantEnabled = useVoiceStore((s) => s.isAssistantEnabled);
+  const updateStatus = useUpdateStore((s) => s.status);
+  const latestVersion = useUpdateStore((s) => s.latestVersion);
 
   // Launcher state
   const [apps, setApps] = useState<InstalledApp[]>([]);
@@ -89,6 +94,9 @@ export const AssistantScreen: React.FC<any> = ({ navigation }) => {
     refreshSystemStatus();
     loadInstalledApps();
     VoicePipeline.initializeWakeWordListener();
+    InAppUpdateService.initialize().then(() => {
+      InAppUpdateService.checkForUpdates(true).catch(() => {});
+    });
     const statusInterval = setInterval(refreshSystemStatus, 5000);
     return () => clearInterval(statusInterval);
   }, []);
@@ -184,6 +192,22 @@ export const AssistantScreen: React.FC<any> = ({ navigation }) => {
           </View>
         </View>
       </TouchableOpacity>
+
+      {/* Update Available Alert Banner */}
+      {updateStatus === 'AVAILABLE' && (
+        <TouchableOpacity
+          style={styles.updateBanner}
+          onPress={() => useUpdateStore.getState().setModalVisible(true)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.updateBannerIcon}>🚀</Text>
+          <View style={styles.updateBannerTextCol}>
+            <Text style={styles.updateBannerTitle}>NEW UPDATE AVAILABLE: v{latestVersion || '1.1.0'}</Text>
+            <Text style={styles.updateBannerSub}>Tap to download and deploy new system capabilities</Text>
+          </View>
+          <Text style={styles.updateBannerAction}>UPDATE ➔</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Quick Setup Alerts: Launcher, Assistant & Accessibility */}
       <View style={styles.badgesRow}>
@@ -470,6 +494,8 @@ export const AssistantScreen: React.FC<any> = ({ navigation }) => {
           </View>
         </ScrollView>
       )}
+
+      <UpdateModal />
     </View>
   );
 };
@@ -898,6 +924,46 @@ const styles = StyleSheet.create({
   },
   iconRed: {
     color: '#ef4444',
+  },
+  updateBanner: {
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 6,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0, 229, 255, 0.12)',
+    borderWidth: 1.5,
+    borderColor: Colors.hudCyan,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  updateBannerIcon: {
+    fontSize: 22,
+  },
+  updateBannerTextCol: {
+    flex: 1,
+  },
+  updateBannerTitle: {
+    color: Colors.hudCyan,
+    fontSize: 12,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  updateBannerSub: {
+    color: Colors.textSecondary,
+    fontSize: 10,
+    marginTop: 1,
+  },
+  updateBannerAction: {
+    color: '#000',
+    backgroundColor: Colors.hudCyan,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
   },
   volumeCard: {
     marginTop: 20,
