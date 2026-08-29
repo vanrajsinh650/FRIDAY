@@ -95,6 +95,7 @@ class FridayForegroundService : Service() {
     private val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
     private val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
 
+    companion object {
         @Volatile
         var isFridaySpeaking: Boolean = false
 

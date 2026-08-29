@@ -3,6 +3,7 @@ package com.friday.modules
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
+import com.friday.services.FridayForegroundService
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.graphics.Bitmap
